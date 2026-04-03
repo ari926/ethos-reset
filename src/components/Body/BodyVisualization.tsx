@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text } from '@react-three/drei';
+import { OrbitControls, Text, Float } from '@react-three/drei';
 import { useHealthStore, type RegionStatus } from '../../stores/healthStore';
 import { formatDate } from '../../lib/utils';
 import * as THREE from 'three';
@@ -9,88 +9,245 @@ const REGION_COLORS: Record<RegionStatus, string> = {
   normal: '#22c55e',
   warning: '#f59e0b',
   critical: '#ef4444',
-  nodata: '#9ca3af',
+  nodata: '#4b5563',
 };
 
+const REGION_GLOW: Record<RegionStatus, number> = {
+  normal: 0.3,
+  warning: 0.5,
+  critical: 0.8,
+  nodata: 0.05,
+};
+
+/* ─── Grid Floor ─── */
+function GridFloor() {
+  return (
+    <group position={[0, -2.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <gridHelper args={[20, 40, '#1a2744', '#0d1528']} rotation={[Math.PI / 2, 0, 0]} />
+    </group>
+  );
+}
+
+/* ─── Scan Line Effect ─── */
+function ScanLine() {
+  const meshRef = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    if (meshRef.current) {
+      const t = (clock.elapsedTime * 0.3) % 1;
+      meshRef.current.position.y = -2 + t * 8;
+      (meshRef.current.material as THREE.MeshBasicMaterial).opacity = 0.08 + Math.sin(t * Math.PI) * 0.06;
+    }
+  });
+
+  return (
+    <mesh ref={meshRef} rotation={[0, 0, 0]}>
+      <planeGeometry args={[4, 0.02]} />
+      <meshBasicMaterial color="#22d3ee" transparent opacity={0.1} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+/* ─── Floating Particles ─── */
+function Particles({ count = 60 }: { count?: number }) {
+  const pointsRef = useRef<THREE.Points>(null);
+
+  const positions = useMemo(() => {
+    const arr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      arr[i * 3] = (Math.random() - 0.5) * 6;
+      arr[i * 3 + 1] = (Math.random() - 0.5) * 8;
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 4;
+    }
+    return arr;
+  }, [count]);
+
+  useFrame(({ clock }) => {
+    if (pointsRef.current) {
+      pointsRef.current.rotation.y = clock.elapsedTime * 0.02;
+      const pos = pointsRef.current.geometry.attributes.position;
+      for (let i = 0; i < count; i++) {
+        const y = pos.getY(i);
+        pos.setY(i, y + Math.sin(clock.elapsedTime + i) * 0.001);
+      }
+      pos.needsUpdate = true;
+    }
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} count={count} />
+      </bufferGeometry>
+      <pointsMaterial size={0.03} color="#22d3ee" transparent opacity={0.4} sizeAttenuation />
+    </points>
+  );
+}
+
+/* ─── Body Outer Shell (transparent silhouette) ─── */
+function BodyShell() {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = Math.sin(clock.elapsedTime * 0.15) * 0.08;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      {/* Head */}
+      <mesh position={[0, 3.8, 0]}>
+        <sphereGeometry args={[0.48, 32, 32]} />
+        <meshPhysicalMaterial color="#1a2744" transparent opacity={0.15} roughness={0.3} metalness={0.1} wireframe />
+      </mesh>
+      {/* Neck */}
+      <mesh position={[0, 3.15, 0]}>
+        <cylinderGeometry args={[0.18, 0.22, 0.3, 16]} />
+        <meshPhysicalMaterial color="#1a2744" transparent opacity={0.12} wireframe />
+      </mesh>
+      {/* Torso upper */}
+      <mesh position={[0, 2.3, 0]}>
+        <capsuleGeometry args={[0.55, 0.8, 16, 32]} />
+        <meshPhysicalMaterial color="#1a2744" transparent opacity={0.12} roughness={0.4} wireframe />
+      </mesh>
+      {/* Torso lower */}
+      <mesh position={[0, 1.0, 0]}>
+        <capsuleGeometry args={[0.48, 0.6, 16, 32]} />
+        <meshPhysicalMaterial color="#1a2744" transparent opacity={0.1} wireframe />
+      </mesh>
+      {/* Left Arm */}
+      <group position={[-0.85, 2.5, 0]} rotation={[0, 0, 0.2]}>
+        <mesh position={[0, -0.6, 0]}>
+          <capsuleGeometry args={[0.12, 1.2, 8, 16]} />
+          <meshPhysicalMaterial color="#1a2744" transparent opacity={0.1} wireframe />
+        </mesh>
+      </group>
+      {/* Right Arm */}
+      <group position={[0.85, 2.5, 0]} rotation={[0, 0, -0.2]}>
+        <mesh position={[0, -0.6, 0]}>
+          <capsuleGeometry args={[0.12, 1.2, 8, 16]} />
+          <meshPhysicalMaterial color="#1a2744" transparent opacity={0.1} wireframe />
+        </mesh>
+      </group>
+      {/* Left Leg */}
+      <mesh position={[-0.28, -0.9, 0]}>
+        <capsuleGeometry args={[0.16, 1.8, 8, 16]} />
+        <meshPhysicalMaterial color="#1a2744" transparent opacity={0.1} wireframe />
+      </mesh>
+      {/* Right Leg */}
+      <mesh position={[0.28, -0.9, 0]}>
+        <capsuleGeometry args={[0.16, 1.8, 8, 16]} />
+        <meshPhysicalMaterial color="#1a2744" transparent opacity={0.1} wireframe />
+      </mesh>
+    </group>
+  );
+}
+
+/* ─── Interactive Organ Region ─── */
 interface BodyRegionProps {
   name: string;
   label: string;
   position: [number, number, number];
-  size: [number, number, number];
-  shape: 'sphere' | 'box' | 'capsule';
+  size: number;
   status: RegionStatus;
   selected: boolean;
   onSelect: (name: string) => void;
 }
 
-function BodyRegion({ name, label, position, size, shape, status, selected, onSelect }: BodyRegionProps) {
+function BodyRegion({ name, label, position, size, status, selected, onSelect }: BodyRegionProps) {
   const [hovered, setHovered] = useState(false);
   const meshRef = useRef<THREE.Mesh>(null);
+  const glowRef = useRef<THREE.Mesh>(null);
   const color = REGION_COLORS[status];
+  const glowIntensity = REGION_GLOW[status];
 
-  // Pulse effect for critical regions
   useFrame(({ clock }) => {
-    if (meshRef.current && status === 'critical') {
-      const scale = 1 + Math.sin(clock.elapsedTime * 3) * 0.05;
-      meshRef.current.scale.setScalar(scale);
+    if (meshRef.current) {
+      if (status === 'critical') {
+        const scale = 1 + Math.sin(clock.elapsedTime * 3) * 0.08;
+        meshRef.current.scale.setScalar(scale);
+      }
+      if (hovered || selected) {
+        meshRef.current.scale.lerp(new THREE.Vector3(1.15, 1.15, 1.15), 0.1);
+      } else if (status !== 'critical') {
+        meshRef.current.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
+      }
+    }
+    if (glowRef.current) {
+      const pulse = 1 + Math.sin(clock.elapsedTime * 2) * 0.15;
+      glowRef.current.scale.setScalar(pulse);
     }
   });
 
   return (
     <group position={position}>
+      {/* Glow sphere (outer) */}
+      <mesh ref={glowRef}>
+        <sphereGeometry args={[size * 1.8, 16, 16]} />
+        <meshBasicMaterial color={color} transparent opacity={(hovered || selected) ? glowIntensity * 0.4 : glowIntensity * 0.15} />
+      </mesh>
+
+      {/* Core organ */}
       <mesh
         ref={meshRef}
-        onClick={() => onSelect(name)}
-        onPointerOver={() => { setHovered(true); document.body.style.cursor = 'pointer'; }}
+        onClick={(e) => { e.stopPropagation(); onSelect(name); }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
         onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
       >
-        {shape === 'sphere' && <sphereGeometry args={[size[0], 16, 16]} />}
-        {shape === 'box' && <boxGeometry args={size} />}
-        {shape === 'capsule' && <capsuleGeometry args={[size[0], size[1], 8, 16]} />}
+        <sphereGeometry args={[size, 24, 24]} />
         <meshStandardMaterial
           color={color}
-          emissive={hovered || selected ? color : '#000000'}
-          emissiveIntensity={hovered ? 0.5 : selected ? 0.3 : 0}
+          emissive={color}
+          emissiveIntensity={hovered ? 1.2 : selected ? 0.8 : glowIntensity}
           transparent
-          opacity={hovered ? 1 : 0.85}
-          roughness={0.4}
+          opacity={hovered ? 0.95 : 0.8}
+          roughness={0.2}
+          metalness={0.3}
         />
       </mesh>
+
+      {/* Label */}
       {(hovered || selected) && (
-        <Text
-          position={[0, size[1] / 2 + 0.3, 0]}
-          fontSize={0.2}
-          color="white"
-          anchorX="center"
-          anchorY="bottom"
-          outlineWidth={0.02}
-          outlineColor="#000000"
-        >
-          {label}
-        </Text>
+        <Float speed={2} floatIntensity={0.3}>
+          <Text
+            position={[0, size + 0.35, 0]}
+            fontSize={0.18}
+            color="#e2e8f0"
+            anchorX="center"
+            anchorY="bottom"
+            outlineWidth={0.015}
+            outlineColor="#000000"
+            font="/fonts/inter-600.woff2"
+          >
+            {label}
+          </Text>
+        </Float>
       )}
     </group>
   );
 }
 
+/* ─── Region Definitions ─── */
 const BODY_REGIONS = [
-  { name: 'head', label: 'Head', position: [0, 3.8, 0] as [number, number, number], size: [0.5, 0.5, 0.5] as [number, number, number], shape: 'sphere' as const },
-  { name: 'chest', label: 'Chest', position: [0, 2.2, 0] as [number, number, number], size: [1.2, 1.0, 0.6] as [number, number, number], shape: 'box' as const },
-  { name: 'heart', label: 'Heart', position: [0.3, 2.4, 0.3] as [number, number, number], size: [0.25, 0.25, 0.25] as [number, number, number], shape: 'sphere' as const },
-  { name: 'lungs', label: 'Lungs', position: [-0.3, 2.3, 0.15] as [number, number, number], size: [0.3, 0.4, 0.25] as [number, number, number], shape: 'sphere' as const },
-  { name: 'abdomen', label: 'Abdomen', position: [0, 1.0, 0] as [number, number, number], size: [1.0, 0.8, 0.5] as [number, number, number], shape: 'box' as const },
-  { name: 'liver', label: 'Liver', position: [0.35, 1.3, 0.2] as [number, number, number], size: [0.22, 0.22, 0.22] as [number, number, number], shape: 'sphere' as const },
-  { name: 'stomach', label: 'Stomach', position: [-0.2, 1.1, 0.2] as [number, number, number], size: [0.2, 0.2, 0.2] as [number, number, number], shape: 'sphere' as const },
-  { name: 'kidneys', label: 'Kidneys', position: [0, 0.8, -0.15] as [number, number, number], size: [0.18, 0.18, 0.18] as [number, number, number], shape: 'sphere' as const },
-  { name: 'left_arm', label: 'Left Arm', position: [-1.1, 2.0, 0] as [number, number, number], size: [0.15, 1.2, 0.15] as [number, number, number], shape: 'capsule' as const },
-  { name: 'right_arm', label: 'Right Arm', position: [1.1, 2.0, 0] as [number, number, number], size: [0.15, 1.2, 0.15] as [number, number, number], shape: 'capsule' as const },
-  { name: 'left_leg', label: 'Left Leg', position: [-0.35, -0.8, 0] as [number, number, number], size: [0.18, 1.5, 0.18] as [number, number, number], shape: 'capsule' as const },
-  { name: 'right_leg', label: 'Right Leg', position: [0.35, -0.8, 0] as [number, number, number], size: [0.18, 1.5, 0.18] as [number, number, number], shape: 'capsule' as const },
-  { name: 'spine', label: 'Spine', position: [0, 1.5, -0.3] as [number, number, number], size: [0.08, 2.0, 0.08] as [number, number, number], shape: 'capsule' as const },
+  { name: 'head', label: 'Head', position: [0, 3.8, 0] as [number, number, number], size: 0.3 },
+  { name: 'heart', label: 'Heart', position: [0.2, 2.5, 0.2] as [number, number, number], size: 0.22 },
+  { name: 'lungs', label: 'Lungs', position: [-0.25, 2.4, 0.1] as [number, number, number], size: 0.28 },
+  { name: 'chest', label: 'Chest', position: [0, 2.2, 0] as [number, number, number], size: 0.35 },
+  { name: 'liver', label: 'Liver', position: [0.35, 1.3, 0.15] as [number, number, number], size: 0.2 },
+  { name: 'stomach', label: 'Stomach', position: [-0.2, 1.2, 0.15] as [number, number, number], size: 0.18 },
+  { name: 'kidneys', label: 'Kidneys', position: [0, 0.85, -0.1] as [number, number, number], size: 0.16 },
+  { name: 'abdomen', label: 'Abdomen', position: [0, 1.0, 0] as [number, number, number], size: 0.32 },
+  { name: 'left_arm', label: 'Left Arm', position: [-0.95, 1.8, 0] as [number, number, number], size: 0.14 },
+  { name: 'right_arm', label: 'Right Arm', position: [0.95, 1.8, 0] as [number, number, number], size: 0.14 },
+  { name: 'left_leg', label: 'Left Leg', position: [-0.28, -0.5, 0] as [number, number, number], size: 0.15 },
+  { name: 'right_leg', label: 'Right Leg', position: [0.28, -0.5, 0] as [number, number, number], size: 0.15 },
+  { name: 'spine', label: 'Spine', position: [0, 1.6, -0.25] as [number, number, number], size: 0.12 },
 ];
 
 const ALL_REGION_NAMES = [...BODY_REGIONS.map(r => r.name), 'blood'];
 
+/* ─── Main Component ─── */
 export default function BodyVisualization() {
   const { regionHealthMap, metrics } = useHealthStore();
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
@@ -99,7 +256,6 @@ export default function BodyVisualization() {
     ? metrics.filter(m => m.body_region === selectedRegion)
     : [];
 
-  // Group metrics by name for trend display
   const metricsByName = new Map<string, typeof metrics>();
   for (const m of selectedMetrics) {
     const existing = metricsByName.get(m.metric_name) ?? [];
@@ -107,7 +263,6 @@ export default function BodyVisualization() {
     metricsByName.set(m.metric_name, existing);
   }
 
-  // Count per region for summary
   const regionSummary = new Map<string, { total: number; flagged: number; status: RegionStatus }>();
   for (const region of ALL_REGION_NAMES) {
     const regionMetrics = metrics.filter(m => m.body_region === region);
@@ -122,11 +277,28 @@ export default function BodyVisualization() {
   return (
     <div className="body-view">
       <div className="body-canvas">
-        <Canvas camera={{ position: [0, 1.5, 6], fov: 45 }}>
-          <ambientLight intensity={0.6} />
-          <directionalLight position={[5, 5, 5]} intensity={0.8} />
-          <directionalLight position={[-3, 3, -3]} intensity={0.3} />
+        <Canvas
+          camera={{ position: [0, 1.5, 6], fov: 40 }}
+          gl={{ antialias: true, alpha: true }}
+          style={{ background: 'transparent' }}
+        >
+          {/* Lighting */}
+          <ambientLight intensity={0.3} />
+          <directionalLight position={[5, 8, 5]} intensity={0.6} color="#e2e8f0" />
+          <directionalLight position={[-3, 4, -3]} intensity={0.2} color="#22d3ee" />
+          <pointLight position={[0, 2, 2]} intensity={0.4} color="#22d3ee" distance={8} />
+          <pointLight position={[0, 0, -2]} intensity={0.15} color="#7c3aed" distance={6} />
 
+          {/* Environment effects */}
+          <fog attach="fog" args={['#060a14', 8, 18]} />
+          <GridFloor />
+          <Particles />
+          <ScanLine />
+
+          {/* Wireframe body shell */}
+          <BodyShell />
+
+          {/* Interactive organ regions */}
           {BODY_REGIONS.map(region => (
             <BodyRegion
               key={region.name}
@@ -139,10 +311,12 @@ export default function BodyVisualization() {
 
           <OrbitControls
             enablePan={false}
-            minDistance={3}
+            minDistance={3.5}
             maxDistance={10}
             minPolarAngle={Math.PI / 6}
             maxPolarAngle={Math.PI / 1.2}
+            autoRotate
+            autoRotateSpeed={0.3}
           />
         </Canvas>
       </div>
@@ -164,7 +338,7 @@ export default function BodyVisualization() {
             </div>
 
             {selectedMetrics.length === 0 ? (
-              <p style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)' }}>
+              <p style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)', lineHeight: 1.6 }}>
                 No health metrics for this region yet. Upload a medical report to populate data.
               </p>
             ) : (
@@ -227,7 +401,7 @@ export default function BodyVisualization() {
                   </button>
                 ))}
               {Array.from(regionSummary.values()).every(s => s.total === 0) && (
-                <p style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)' }}>
+                <p style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)', lineHeight: 1.6 }}>
                   No health data yet. Upload a report to map data to body regions.
                 </p>
               )}
@@ -239,7 +413,7 @@ export default function BodyVisualization() {
       <div className="body-legend">
         {Object.entries(REGION_COLORS).map(([status, color]) => (
           <div key={status} className="body-legend-item">
-            <span className="body-legend-dot" style={{ background: color }} />
+            <span className="body-legend-dot" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
             <span>{status === 'nodata' ? 'No Data' : status.charAt(0).toUpperCase() + status.slice(1)}</span>
           </div>
         ))}

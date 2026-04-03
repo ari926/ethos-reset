@@ -35,8 +35,8 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
   return (
     <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
       <div className="sidebar-brand">
-        <Heart size={24} fill="var(--color-primary)" color="var(--color-primary)" />
-        {!collapsed && <span className="sidebar-brand-text">Health Tracker</span>}
+        <Heart size={22} fill="var(--color-primary)" color="var(--color-primary)" />
+        {!collapsed && <span className="sidebar-brand-text">Ethos Reset</span>}
       </div>
 
       <nav className="sidebar-nav">
@@ -47,7 +47,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
             className={({ isActive }) => `sidebar-nav-item${isActive ? ' active' : ''}`}
             title={collapsed ? label : undefined}
           >
-            <Icon size={18} />
+            <Icon size={20} strokeWidth={1.75} />
             {!collapsed && <span>{label}</span>}
           </NavLink>
         ))}
