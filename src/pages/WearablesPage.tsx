@@ -6,6 +6,9 @@ import { useHealthStore } from '../stores/healthStore';
 import toast from 'react-hot-toast';
 import { timeAgo } from '../lib/utils';
 
+// Oura proxy worker URL — update after deploying
+const OURA_PROXY_URL = 'https://oura-proxy.ari-863.workers.dev';
+
 interface WearableConnection {
   id: string;
   provider: string;
@@ -71,6 +74,22 @@ export default function WearablesPage() {
 
   useEffect(() => { loadConnections(); }, []);
 
+  // Handle OAuth callback result
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get('connected');
+    const error = params.get('error');
+    if (connected === 'oura') {
+      toast.success('Oura Ring connected successfully!');
+      loadConnections();
+      // Clean URL
+      window.history.replaceState({}, '', '/wearables');
+    } else if (error) {
+      toast.error(`Connection failed: ${error.replace(/_/g, ' ')}`);
+      window.history.replaceState({}, '', '/wearables');
+    }
+  }, []);
+
   const handleConnect = async (provider: string) => {
     if (!user || !activeMemberId) {
       toast.error('Select a family member first');
@@ -85,12 +104,18 @@ export default function WearablesPage() {
     }
 
     const def = WEARABLE_DEFS.find(w => w.id === provider);
-    if (def?.integration === 'direct') {
-      // For Oura and WHOOP — OAuth flow will redirect
-      // TODO: Implement OAuth redirect to provider
-      toast.success(`${def.name} connection initiated — OAuth flow coming soon`);
+    if (provider === 'oura') {
+      // Real OAuth flow — redirect to Oura via our proxy worker
+      const proxyBase = OURA_PROXY_URL;
+      const authUrl = `${proxyBase}/auth/start?member_id=${activeMemberId}&owner_id=${user.id}`;
+      window.location.href = authUrl;
+      return;
+    }
 
-      // Create placeholder connection record
+    if (def?.integration === 'direct') {
+      // WHOOP — OAuth coming soon
+      toast.success(`${def.name} — OAuth integration coming soon`);
+
       if (existing) {
         await supabase.from('wearable_connections').update({ status: 'connected' }).eq('id', existing.id);
       } else {
@@ -127,10 +152,32 @@ export default function WearablesPage() {
 
   const handleSync = async (connectionId: string, provider: string) => {
     setSyncing(provider);
-    // TODO: Trigger actual sync via Edge Function or webhook
-    await new Promise(r => setTimeout(r, 1500));
-    await supabase.from('wearable_connections').update({ last_sync_at: new Date().toISOString() }).eq('id', connectionId);
-    toast.success('Sync complete');
+    try {
+      if (provider === 'oura') {
+        const res = await fetch(`${OURA_PROXY_URL}/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ connection_id: connectionId }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast.success(`Synced ${data.synced ?? 0} data points from Oura`);
+        } else {
+          toast.error(data.error ?? 'Sync failed');
+          if (res.status === 401) {
+            toast.error('Token expired — please reconnect your Oura Ring');
+          }
+        }
+      } else {
+        // Placeholder for other providers
+        await new Promise(r => setTimeout(r, 1500));
+        await supabase.from('wearable_connections').update({ last_sync_at: new Date().toISOString() }).eq('id', connectionId);
+        toast.success('Sync complete');
+      }
+    } catch (err) {
+      toast.error('Sync failed — check your connection');
+      console.error('Sync error:', err);
+    }
     setSyncing(null);
     loadConnections();
   };
