@@ -4,7 +4,6 @@ import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './stores/authStore';
 import { useHealthStore } from './stores/healthStore';
 import AppShell from './components/Layout/AppShell';
-import LoginPage from './components/Auth/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import BodyPage from './pages/BodyPage';
 import ReportsPage from './pages/ReportsPage';
