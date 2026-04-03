@@ -752,3 +752,195 @@ input, select, textarea { font-family: inherit; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-tx-faint); }
+
+/* ─── MOBILE BOTTOM NAV ─── */
+.mobile-nav {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-divider);
+  padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom));
+  z-index: 100;
+  justify-content: space-around;
+}
+[data-theme="dark"] .mobile-nav {
+  background: rgba(17,24,39,0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top-color: rgba(255,255,255,0.06);
+}
+.mobile-nav-item {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 0.35rem 0.75rem; border-radius: var(--radius-md);
+  font-size: 10px; font-weight: 500;
+  color: var(--color-tx-faint); background: none; border: none;
+  text-decoration: none; transition: color 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-nav-item.active {
+  color: var(--color-primary);
+}
+.mobile-nav-item:hover { text-decoration: none; }
+
+/* Mobile More Sheet */
+.mobile-more-overlay {
+  position: fixed; inset: 0; z-index: 99;
+  background: rgba(0,0,0,0.5);
+  display: flex; align-items: flex-end;
+  animation: fadeIn 150ms ease;
+}
+.mobile-more-sheet {
+  width: 100%; padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
+  background: var(--color-surface); border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  animation: slideUp 200ms ease;
+}
+[data-theme="dark"] .mobile-more-sheet {
+  background: #111827;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.mobile-more-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.25rem 0.5rem 0.75rem; font-weight: 600; font-size: var(--text-sm);
+}
+.mobile-more-item {
+  display: block; padding: 0.85rem 1rem; border-radius: var(--radius-md);
+  font-size: var(--text-sm); font-weight: 500;
+  color: var(--color-tx); text-decoration: none;
+  transition: background 150ms ease;
+}
+.mobile-more-item:hover { background: var(--color-primary-hl); text-decoration: none; }
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE — TABLET (≤ 1024px)
+   ═══════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 68px 1fr;
+  }
+  .sidebar-brand-text,
+  .sidebar-nav-item span,
+  .sidebar-user-info,
+  .sidebar-logout,
+  .sidebar-collapse-btn span { display: none; }
+  .sidebar-nav-item { justify-content: center; padding: 0.6rem; }
+  .sidebar-brand { justify-content: center; }
+  .sidebar-collapse-btn { display: none; }
+
+  .main-content { padding: 1.25rem; }
+  .view-header { margin-bottom: 1.25rem; }
+
+  .body-side-panel { width: 280px; }
+  .body-region-panel { width: 280px; }
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE — MOBILE (≤ 768px)
+   ═══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Show mobile nav, hide sidebar */
+  .mobile-nav { display: flex; }
+  .sidebar { display: none; }
+  .sidebar-collapse-btn { display: none; }
+
+  .app-shell, .app-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: 56px 1fr;
+    grid-template-areas: "header" "main";
+  }
+
+  .header { padding: 0 1rem; }
+
+  .main-content {
+    padding: 1rem;
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* KPI cards */
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem; }
+  .kpi-card { padding: 1rem; }
+
+  /* View headers */
+  .view-header {
+    flex-direction: column; align-items: flex-start;
+    margin-bottom: 1rem; gap: 0.5rem;
+  }
+  .view-title { font-size: var(--text-lg); }
+
+  /* Forms */
+  .form-grid { grid-template-columns: 1fr; }
+  .form-actions { flex-direction: column; }
+  .form-actions .btn { width: 100%; justify-content: center; }
+
+  /* Filter bar */
+  .filter-bar { flex-wrap: wrap; gap: 0.5rem; }
+  .filter-bar .select-field { min-width: 120px; flex: 1; }
+
+  /* 3D Body View — FULL SCREEN on mobile */
+  .body-view {
+    flex-direction: column; gap: 0;
+    height: calc(100vh - 56px - 4.5rem - env(safe-area-inset-bottom));
+    position: relative;
+  }
+  .body-canvas {
+    flex: 1; border-radius: 0;
+    margin: -1rem -1rem 0;
+    border: none;
+  }
+  .body-canvas canvas { border-radius: 0; }
+  .body-side-panel {
+    position: fixed; bottom: calc(4rem + env(safe-area-inset-bottom));
+    left: 0; right: 0; width: 100%; max-height: 45vh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    z-index: 50; padding: 1rem 1rem 1.5rem;
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.3);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  .body-region-panel {
+    width: 100%; max-height: 45vh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+  .body-canvas-container {
+    height: calc(100vh - 56px - 4.5rem - env(safe-area-inset-bottom));
+  }
+
+  /* Chat */
+  .chat-page { height: calc(100vh - 56px - 4.5rem - env(safe-area-inset-bottom)); }
+  .chat-message { max-width: 88%; }
+  .chat-suggestions { justify-content: flex-start; }
+
+  /* Cards */
+  .card { border-radius: var(--radius-lg); }
+
+  /* Doctor cards */
+  .doctor-card { padding: 1rem; }
+  .doctor-card-actions { flex-direction: column; }
+  .doctor-card-actions .btn { width: 100%; justify-content: center; }
+
+  /* Modal */
+  .modal-overlay .modal { width: 95vw; max-height: 85vh; margin: auto; }
+  .modal-overlay .modal.wide { width: 95vw; }
+
+  /* Toast */
+  .Toaster { bottom: calc(5rem + env(safe-area-inset-bottom)) !important; }
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE — SMALL PHONE (≤ 480px)
+   ═══════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  .kpi-card { padding: 0.85rem; }
+
+  .main-content { padding: 0.75rem; padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
+
+  .view-title { font-size: clamp(1.1rem, 4vw, 1.35rem); }
+
+  /* Tighter spacing */
+  .btn { padding: 0.5rem 0.9rem; font-size: var(--text-xs); }
+  .btn-sm { padding: 0.3rem 0.6rem; }
+
+  /* Body side panel even more compact */
+  .body-side-panel { max-height: 40vh; padding: 0.75rem; }
+}

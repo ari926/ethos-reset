@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import MobileNav from './MobileNav';
 
 export default function AppShell() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -30,6 +31,7 @@ export default function AppShell() {
         <main className="main-content">
           <Outlet />
         </main>
+        <MobileNav />
       </div>
     </div>
   );
