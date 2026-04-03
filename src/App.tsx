@@ -15,18 +15,8 @@ import ChatPage from './pages/ChatPage';
 import DoctorsPage from './pages/DoctorsPage';
 import FamilyPage from './pages/FamilyPage';
 
+// AUTH TEMPORARILY DISABLED
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { session, loading, initialized } = useAuthStore();
-
-  if (!initialized || loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: 'var(--color-bg)' }}>
-        <div style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)' }}>Loading...</div>
-      </div>
-    );
-  }
-
-  if (!session) return <LoginPage />;
   return <>{children}</>;
 }
 
