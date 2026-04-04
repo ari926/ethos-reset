@@ -569,6 +569,10 @@ export default function ReportsPage() {
                             <span className="badge badge-success" title="AI analyzed — data extracted to Lab Explorer">✓ AI Analyzed</span>
                           ) : r.processing_status === 'failed' ? (
                             <span className="badge badge-error">Failed</span>
+                          ) : r.processing_status === 'processing' ? (
+                            <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <span style={{ animation: 'doctorBounce 1.2s ease-in-out infinite', display: 'inline-block' }}>👨‍⚕️</span> Analyzing...
+                            </span>
                           ) : r.processing_status === 'uploaded' ? (
                             <span className="badge badge-muted" title="Document uploaded but not yet analyzed by AI">Uploaded</span>
                           ) : (
@@ -738,13 +742,18 @@ function UploadModal({ open, onClose, memberId, onUpload }: {
         </div>
 
         {uploading && (
-          <div style={{ margin: '0.75rem 0' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)', marginBottom: '0.35rem' }}>
-              <span>Uploading...</span>
-              <span>{uploadProgress}%</span>
+          <div style={{ margin: '1rem 0', padding: '1.25rem', background: 'var(--color-surface-offset)', borderRadius: 'var(--radius-lg)', textAlign: 'center' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '0.5rem', animation: 'doctorBounce 1.2s ease-in-out infinite' }}>
+              {uploadProgress < 40 ? '👨‍⚕️' : uploadProgress < 70 ? '🔬' : uploadProgress < 90 ? '📋' : '✅'}
             </div>
-            <div style={{ height: '4px', background: 'var(--color-surface-offset)', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${uploadProgress}%`, background: 'var(--color-primary)', borderRadius: '2px', transition: 'width 300ms ease' }} />
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-tx)', marginBottom: '0.25rem' }}>
+              {uploadProgress < 40 ? 'Dr. Atlas is receiving your files...' : uploadProgress < 70 ? 'Analyzing documents...' : uploadProgress < 90 ? 'Extracting health data...' : 'Almost done!'}
+            </div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)', marginBottom: '0.75rem' }}>
+              {uploadProgress}% complete
+            </div>
+            <div style={{ height: '6px', background: 'rgba(0,0,0,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${uploadProgress}%`, background: 'linear-gradient(90deg, var(--color-primary), #22d3ee)', borderRadius: '3px', transition: 'width 300ms ease' }} />
             </div>
           </div>
         )}

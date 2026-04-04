@@ -101,6 +101,12 @@
 @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 var(--color-primary-glow); } 50% { box-shadow: 0 0 20px 4px var(--color-primary-glow); } }
 @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes doctorBounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-6px) rotate(-5deg); }
+  50% { transform: translateY(0) rotate(0deg); }
+  75% { transform: translateY(-3px) rotate(5deg); }
+}
 @keyframes breathe { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 @keyframes scanLine { 0% { top: 0; } 100% { top: 100%; } }
 
