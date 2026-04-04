@@ -15,6 +15,7 @@ import ChatPage from './pages/ChatPage';
 import DoctorsPage from './pages/DoctorsPage';
 import FamilyPage from './pages/FamilyPage';
 import InvitePage from './pages/InvitePage';
+import DoctorSharePage from './pages/DoctorSharePage';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const session = useAuthStore(s => s.session);
@@ -61,6 +62,7 @@ export default function App() {
       />
       <Routes>
         <Route path="/invite/:token" element={<InvitePage />} />
+        <Route path="/share/:token" element={<DoctorSharePage />} />
         <Route path="*" element={
           <AuthGate>
             <Routes>
