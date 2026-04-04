@@ -188,6 +188,50 @@ async function callAnthropicWithPDF(
     .join('');
 }
 
+async function callOpenAIWithFile(
+  env: Env,
+  systemPrompt: string,
+  fileBase64: string,
+  mediaType: string
+): Promise<string> {
+  // For PDFs, use the file input; for images, use image_url
+  const isImage = mediaType.includes('image');
+  const userContent = isImage
+    ? [
+        { type: 'image_url' as const, image_url: { url: `data:${mediaType};base64,${fileBase64}` } },
+        { type: 'text' as const, text: 'Extract all measurable health data from this document. Respond with valid JSON only.' },
+      ]
+    : [
+        { type: 'file' as const, file: { filename: 'report.pdf', file_data: `data:application/pdf;base64,${fileBase64}` } },
+        { type: 'text' as const, text: 'Extract all measurable health data from this document. Respond with valid JSON only.' },
+      ];
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      max_tokens: 8192,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenAI API error ${res.status}: ${errText}`);
+  }
+
+  const data = await res.json() as { choices: Array<{ message: { content: string } }> };
+  return data.choices[0]?.message?.content ?? '';
+}
+
 async function callOpenAI(
   env: Env,
   systemPrompt: string,
@@ -262,12 +306,11 @@ async function processReport(env: Env, fileUrl: string, reportType: string, titl
 
   let responseText: string;
 
+  // Use GPT-4o for report processing (higher rate limits, great vision)
   if (contentType.includes('pdf')) {
-    // Use Claude's native PDF support
-    responseText = await callAnthropicWithPDF(env, REPORT_EXTRACTION_SYSTEM, base64, 'application/pdf');
+    responseText = await callOpenAIWithFile(env, REPORT_EXTRACTION_SYSTEM, base64, 'application/pdf');
   } else if (contentType.includes('image')) {
-    // Use Claude's vision for images
-    responseText = await callAnthropicWithPDF(env, REPORT_EXTRACTION_SYSTEM, base64, contentType);
+    responseText = await callOpenAIWithFile(env, REPORT_EXTRACTION_SYSTEM, base64, contentType);
   } else {
     throw new Error(`Unsupported file type: ${contentType}`);
   }
