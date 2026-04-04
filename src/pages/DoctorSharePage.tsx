@@ -1,390 +1,187 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { Heart, Stethoscope, FileText, Activity, AlertTriangle, Loader, ChevronDown, ChevronRight } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Heart, Stethoscope, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../stores/authStore';
+import toast from 'react-hot-toast';
 
-interface MemberData {
+interface DoctorData {
   id: string;
-  first_name: string;
-  last_name: string;
-  date_of_birth: string | null;
-  gender: string | null;
-  blood_type: string | null;
-  height_cm: number | null;
-  weight_kg: number | null;
-  notes: string | null;
-}
-
-interface MetricData {
-  id: string;
-  metric_name: string;
-  metric_value: string;
-  metric_unit: string | null;
-  status: string | null;
-  body_region: string | null;
-  recorded_date: string;
-  ref_range_low: number | null;
-  ref_range_high: number | null;
-}
-
-interface ReportData {
-  id: string;
-  title: string;
-  report_type: string | null;
-  report_date: string | null;
-  summary: string | null;
-}
-
-function calculateAge(dob: string | null): number | null {
-  if (!dob) return null;
-  const birth = new Date(dob);
-  const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--;
-  return age;
+  full_name: string | null;
+  name: string | null;
+  email: string;
+  status: string;
 }
 
 export default function DoctorSharePage() {
   const { token } = useParams<{ token: string }>();
+  const navigate = useNavigate();
+  const { session, signInWithGoogle, initialized } = useAuthStore();
+  const [doctor, setDoctor] = useState<DoctorData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [doctorName, setDoctorName] = useState('');
-  const [members, setMembers] = useState<MemberData[]>([]);
-  const [metrics, setMetrics] = useState<Record<string, MetricData[]>>({});
-  const [reports, setReports] = useState<Record<string, ReportData[]>>({});
-  const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
+  // Load doctor data from share token
   useEffect(() => {
     if (!token) return;
-    loadShareData();
+    (async () => {
+      const { data, error: fetchError } = await supabase
+        .from('doctors')
+        .select('id, full_name, name, email, status')
+        .eq('share_token', token)
+        .single();
+
+      if (fetchError || !data) {
+        setError('This share link is invalid or has expired.');
+        setLoading(false);
+        return;
+      }
+
+      if (data.status === 'revoked') {
+        setError('Access has been revoked for this share link.');
+        setLoading(false);
+        return;
+      }
+
+      setDoctor(data);
+      setLoading(false);
+    })();
   }, [token]);
 
-  const loadShareData = async () => {
-    // Find the doctor by share token
-    const { data: doc, error: docError } = await supabase
+  // Auto-accept if already signed in
+  useEffect(() => {
+    if (session && doctor && !accepting) {
+      acceptDoctorInvite();
+    }
+  }, [session, doctor]);
+
+  const acceptDoctorInvite = async () => {
+    if (!session || !doctor) return;
+    setAccepting(true);
+
+    // Link the doctor record to this auth user
+    const { error: updateError } = await supabase
       .from('doctors')
-      .select('id, full_name, name, email, status')
-      .eq('share_token', token)
-      .single();
+      .update({
+        auth_user_id: session.user.id,
+        status: 'active',
+      })
+      .eq('id', doctor.id);
 
-    if (docError || !doc) {
-      setError('This share link is invalid or has expired.');
-      setLoading(false);
+    if (updateError) {
+      toast.error('Failed to set up doctor access. Please try again.');
+      setAccepting(false);
       return;
     }
 
-    if (doc.status === 'revoked') {
-      setError('Access has been revoked for this share link.');
-      setLoading(false);
-      return;
-    }
-
-    setDoctorName(doc.full_name || doc.name || doc.email);
-
-    // Get which members this doctor has access to
-    const { data: access } = await supabase
-      .from('doctor_member_access')
-      .select('member_id')
-      .eq('doctor_id', doc.id);
-
-    if (!access || access.length === 0) {
-      setError('No patient access has been granted for this link.');
-      setLoading(false);
-      return;
-    }
-
-    const memberIds = access.map(a => a.member_id);
-
-    // Fetch member profiles
-    const { data: memberData } = await supabase
-      .from('family_members')
-      .select('id, first_name, last_name, date_of_birth, gender, blood_type, height_cm, weight_kg, notes')
-      .in('id', memberIds);
-
-    if (memberData) {
-      setMembers(memberData);
-      // Auto-expand first member
-      if (memberData.length > 0) {
-        setExpandedMembers(new Set([memberData[0].id]));
-      }
-    }
-
-    // Fetch metrics for all accessible members
-    const metricsMap: Record<string, MetricData[]> = {};
-    const reportsMap: Record<string, ReportData[]> = {};
-
-    for (const mid of memberIds) {
-      const { data: mets } = await supabase
-        .from('health_metrics')
-        .select('id, metric_name, metric_value, metric_unit, status, body_region, recorded_date, ref_range_low, ref_range_high')
-        .eq('member_id', mid)
-        .order('recorded_date', { ascending: false })
-        .limit(200);
-      metricsMap[mid] = mets ?? [];
-
-      const { data: reps } = await supabase
-        .from('health_reports')
-        .select('id, title, report_type, report_date, summary')
-        .eq('member_id', mid)
-        .order('report_date', { ascending: false });
-      reportsMap[mid] = reps ?? [];
-    }
-
-    setMetrics(metricsMap);
-    setReports(reportsMap);
-    setLoading(false);
+    toast.success('Welcome! You now have access to patient health data.');
+    navigate('/dashboard');
   };
 
-  const toggleMember = (id: string) => {
-    setExpandedMembers(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const handleGoogleSignIn = async () => {
+    if (token) {
+      localStorage.setItem('pending_doctor_token', token);
+    }
+    const result = await signInWithGoogle();
+    if (result.error) {
+      setError(result.error);
+    }
   };
 
-  const toggleSection = (key: string) => {
-    setExpandedSections(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  if (loading) {
+  if (loading || !initialized) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: '1rem', color: 'var(--color-tx-muted)' }}>
-        <Loader size={32} className="spin" style={{ color: 'var(--color-primary)' }} />
-        <p>Loading patient data...</p>
+      <div className="login-page">
+        <div className="login-container">
+          <Loader size={32} className="spin" style={{ color: 'var(--color-primary)' }} />
+          <p style={{ marginTop: '1rem', color: 'var(--color-tx-muted)' }}>Loading...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: '1rem', padding: '2rem', textAlign: 'center' }}>
-        <Heart size={56} fill="var(--color-primary)" color="var(--color-primary)" />
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Ethos Reset</h1>
-        <p style={{ color: 'var(--color-error)' }}>{error}</p>
+      <div className="login-page">
+        <div className="login-container">
+          <Heart size={56} className="login-logo" fill="var(--color-primary)" color="var(--color-primary)" />
+          <h1 className="login-title">Ethos Reset</h1>
+          <div className="login-card" style={{ textAlign: 'center' }}>
+            <p style={{ color: 'var(--color-error)', marginBottom: '1rem' }}>{error}</p>
+            <button className="btn btn-primary" onClick={() => navigate('/')}>
+              Go to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (accepting) {
+    return (
+      <div className="login-page">
+        <div className="login-container">
+          <Loader size={32} className="spin" style={{ color: 'var(--color-primary)' }} />
+          <p style={{ marginTop: '1rem', color: 'var(--color-tx-muted)' }}>Setting up your access...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '1px solid var(--color-divider)' }}>
-        <Heart size={32} fill="var(--color-primary)" color="var(--color-primary)" />
-        <div>
-          <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Ethos Reset</h1>
-          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-tx-muted)' }}>
-            <Stethoscope size={12} style={{ display: 'inline', verticalAlign: '-1px', marginRight: '0.25rem' }} />
-            Doctor Portal — {doctorName}
-          </p>
-        </div>
-        <span className="badge badge-success" style={{ marginLeft: 'auto' }}>Read-Only</span>
-      </div>
+    <div className="login-page">
+      <div className="login-container">
+        <Heart size={56} className="login-logo" fill="var(--color-primary)" color="var(--color-primary)" />
+        <h1 className="login-title">Ethos Reset</h1>
+        <p className="login-subtitle">Doctor Portal Access</p>
 
-      {/* Patient Cards */}
-      {members.map(member => {
-        const isExpanded = expandedMembers.has(member.id);
-        const memberMetrics = metrics[member.id] ?? [];
-        const memberReports = reports[member.id] ?? [];
-        const age = calculateAge(member.date_of_birth);
-        const flaggedCount = memberMetrics.filter(m => m.status === 'high' || m.status === 'critical' || m.status === 'low').length;
-
-        // Group metrics by body region
-        const metricsByRegion: Record<string, MetricData[]> = {};
-        for (const m of memberMetrics) {
-          const region = m.body_region ?? 'other';
-          if (!metricsByRegion[region]) metricsByRegion[region] = [];
-          metricsByRegion[region].push(m);
-        }
-
-        return (
-          <div key={member.id} style={{
-            border: '1px solid var(--color-divider)',
-            borderRadius: 'var(--radius-lg)',
+        <div className="login-card">
+          <div style={{
+            textAlign: 'center',
+            padding: '1.5rem 0',
             marginBottom: '1rem',
-            overflow: 'hidden',
           }}>
-            {/* Patient Header */}
-            <button
-              onClick={() => toggleMember(member.id)}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: '1rem',
-                padding: '1rem 1.25rem', background: 'var(--color-surface)',
-                border: 'none', cursor: 'pointer', textAlign: 'left',
-              }}
-            >
-              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-              <div style={{ flex: 1 }}>
-                <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>
-                  {member.first_name} {member.last_name}
-                </h2>
-                <p style={{ margin: '0.15rem 0 0', fontSize: 'var(--text-sm)', color: 'var(--color-tx-muted)' }}>
-                  {age !== null ? `${age} yrs` : ''}
-                  {member.gender ? ` · ${member.gender}` : ''}
-                  {member.blood_type ? ` · ${member.blood_type}` : ''}
-                </p>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <span className="badge badge-muted">{memberMetrics.length} metrics</span>
-                <span className="badge badge-muted">{memberReports.length} reports</span>
-                {flaggedCount > 0 && (
-                  <span className="badge badge-warning">{flaggedCount} flagged</span>
-                )}
-              </div>
-            </button>
-
-            {isExpanded && (
-              <div style={{ padding: '0 1.25rem 1.25rem', background: 'var(--color-surface-offset, #fafbfc)' }}>
-
-                {/* Flagged Metrics Summary */}
-                {flaggedCount > 0 && (
-                  <div style={{ marginTop: '1rem' }}>
-                    <button
-                      onClick={() => toggleSection(`${member.id}-flagged`)}
-                      style={{
-                        width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                        padding: '0.6rem 0.75rem', background: 'var(--color-error-bg, rgba(239,68,68,0.08))',
-                        border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                        fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-tx)', textAlign: 'left',
-                      }}
-                    >
-                      {expandedSections.has(`${member.id}-flagged`) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      <AlertTriangle size={14} style={{ color: 'var(--color-error)' }} />
-                      Flagged Metrics ({flaggedCount})
-                    </button>
-                    {expandedSections.has(`${member.id}-flagged`) && (
-                      <div style={{ padding: '0.5rem 0' }}>
-                        {memberMetrics.filter(m => m.status === 'high' || m.status === 'critical' || m.status === 'low').map(m => (
-                          <div key={m.id} style={{
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--color-divider)',
-                            fontSize: 'var(--text-sm)',
-                          }}>
-                            <div>
-                              <span style={{ fontWeight: 500 }}>{m.metric_name}</span>
-                              <span style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-xs)', marginLeft: '0.5rem' }}>
-                                {m.recorded_date}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span>{m.metric_value} {m.metric_unit ?? ''}</span>
-                              {m.ref_range_low != null && m.ref_range_high != null && (
-                                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-faint)' }}>
-                                  [{m.ref_range_low}-{m.ref_range_high}]
-                                </span>
-                              )}
-                              <span className={`badge badge-${m.status === 'critical' ? 'error' : 'warning'}`} style={{ fontSize: '10px' }}>
-                                {m.status}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Reports */}
-                {memberReports.length > 0 && (
-                  <div style={{ marginTop: '1rem' }}>
-                    <button
-                      onClick={() => toggleSection(`${member.id}-reports`)}
-                      style={{
-                        width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                        padding: '0.6rem 0.75rem', background: 'var(--color-surface)',
-                        border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                        fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-tx)', textAlign: 'left',
-                      }}
-                    >
-                      {expandedSections.has(`${member.id}-reports`) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      <FileText size={14} />
-                      Reports ({memberReports.length})
-                    </button>
-                    {expandedSections.has(`${member.id}-reports`) && (
-                      <div style={{ padding: '0.5rem 0' }}>
-                        {memberReports.map(r => (
-                          <div key={r.id} style={{
-                            padding: '0.6rem 0.75rem', borderBottom: '1px solid var(--color-divider)',
-                            fontSize: 'var(--text-sm)',
-                          }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontWeight: 500 }}>{r.title}</span>
-                              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                {r.report_type && <span className="badge badge-muted">{r.report_type}</span>}
-                                {r.report_date && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-faint)' }}>{r.report_date}</span>}
-                              </div>
-                            </div>
-                            {r.summary && (
-                              <p style={{ margin: '0.35rem 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)', lineHeight: 1.5 }}>
-                                {r.summary}
-                              </p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* All Metrics by Body Region */}
-                {Object.entries(metricsByRegion).map(([region, mets]) => (
-                  <div key={region} style={{ marginTop: '0.75rem' }}>
-                    <button
-                      onClick={() => toggleSection(`${member.id}-${region}`)}
-                      style={{
-                        width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                        padding: '0.6rem 0.75rem', background: 'var(--color-surface)',
-                        border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                        fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-tx)', textAlign: 'left',
-                      }}
-                    >
-                      {expandedSections.has(`${member.id}-${region}`) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      <Activity size={14} />
-                      {region.charAt(0).toUpperCase() + region.slice(1)} ({mets.length})
-                    </button>
-                    {expandedSections.has(`${member.id}-${region}`) && (
-                      <div style={{ padding: '0.5rem 0' }}>
-                        {mets.map(m => (
-                          <div key={m.id} style={{
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            padding: '0.4rem 0.75rem', borderBottom: '1px solid var(--color-divider)',
-                            fontSize: 'var(--text-sm)',
-                          }}>
-                            <div>
-                              <span style={{ fontWeight: 500 }}>{m.metric_name}</span>
-                              <span style={{ color: 'var(--color-tx-faint)', fontSize: 'var(--text-xs)', marginLeft: '0.5rem' }}>{m.recorded_date}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span>{m.metric_value} {m.metric_unit ?? ''}</span>
-                              {m.status && m.status !== 'normal' && (
-                                <span className={`badge badge-${m.status === 'critical' ? 'error' : m.status === 'high' || m.status === 'low' ? 'warning' : 'success'}`} style={{ fontSize: '10px' }}>
-                                  {m.status}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+            <Stethoscope size={36} style={{ color: 'var(--color-primary)', marginBottom: '0.75rem' }} />
+            <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, margin: '0 0 0.5rem' }}>
+              Welcome, Doctor
+            </h2>
+            <p style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)', margin: 0 }}>
+              A patient has granted you access to their health data.
+              Sign in to view their full health dashboard, reports, and lab results.
+            </p>
           </div>
-        );
-      })}
 
-      {/* Footer */}
-      <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--color-tx-faint)', fontSize: 'var(--text-xs)' }}>
-        <Heart size={14} fill="var(--color-primary)" color="var(--color-primary)" style={{ display: 'inline', verticalAlign: '-2px', marginRight: '0.25rem' }} />
-        Powered by Ethos Reset · Read-only access · Data shared by patient
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.75rem',
+              padding: '0.7rem 1rem',
+              background: 'var(--color-surface, #fff)',
+              border: '1px solid var(--color-divider, #e2e8f0)',
+              borderRadius: 'var(--radius-md, 8px)',
+              cursor: 'pointer',
+              fontSize: 'var(--text-sm, 0.875rem)',
+              fontWeight: 500,
+              color: 'var(--color-tx, #1a1a2e)',
+              transition: 'background 0.15s, box-shadow 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface-offset, #f8fafc)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface, #fff)'; }}
+          >
+            <svg width="18" height="18" viewBox="0 0 48 48">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
+            Continue with Google
+          </button>
+        </div>
       </div>
     </div>
   );

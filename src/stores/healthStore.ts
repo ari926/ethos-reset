@@ -163,23 +163,58 @@ export const useHealthStore = create<HealthState>((set, get) => ({
 
   loadFamilyMembers: async () => {
     set({ loading: true });
+
+    // First try loading as owner or invited member (RLS handles this)
     const { data, error } = await supabase
       .from('family_members')
       .select('*')
       .order('created_at', { ascending: true });
 
-    if (error || !data || data.length === 0) {
+    let members = data ?? [];
+
+    // If no members found, check if user is a doctor with patient access
+    if ((!data || data.length === 0) && !error) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Find doctor record for this auth user
+        const { data: docData } = await supabase
+          .from('doctors')
+          .select('id')
+          .eq('auth_user_id', session.user.id)
+          .eq('status', 'active')
+          .limit(1);
+
+        if (docData && docData.length > 0) {
+          // Get member IDs this doctor has access to
+          const { data: accessData } = await supabase
+            .from('doctor_member_access')
+            .select('member_id')
+            .eq('doctor_id', docData[0].id);
+
+          if (accessData && accessData.length > 0) {
+            const memberIds = accessData.map(a => a.member_id);
+            const { data: doctorMembers } = await supabase
+              .from('family_members')
+              .select('*')
+              .in('id', memberIds)
+              .order('created_at', { ascending: true });
+            members = doctorMembers ?? [];
+          }
+        }
+      }
+    }
+
+    if (members.length === 0) {
       // Fall back to demo seed data when DB is empty/unavailable
-      const members = SEED_MEMBERS;
-      set({ familyMembers: members, loading: false });
-      if (!get().activeMemberId && members.length > 0) {
-        set({ activeMemberId: members[0].id });
-        get().loadMemberData(members[0].id);
+      const seedMembers = SEED_MEMBERS;
+      set({ familyMembers: seedMembers, loading: false });
+      if (!get().activeMemberId && seedMembers.length > 0) {
+        set({ activeMemberId: seedMembers[0].id });
+        get().loadMemberData(seedMembers[0].id);
       }
       return;
     }
 
-    const members = data ?? [];
     set({ familyMembers: members, loading: false });
 
     // Auto-select first member if none selected

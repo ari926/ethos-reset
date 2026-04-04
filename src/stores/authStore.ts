@@ -42,13 +42,22 @@ export const useAuthStore = create<AuthState>((set) => ({
           const pendingToken = localStorage.getItem('pending_invite_token');
           if (pendingToken) {
             localStorage.removeItem('pending_invite_token');
-            // Accept the invite by linking auth_user_id
             await supabase
               .from('family_members')
               .update({ auth_user_id: session.user.id, invite_status: 'accepted' })
               .eq('invite_token', pendingToken)
               .eq('invite_status', 'pending');
-            // Redirect to dashboard
+            window.location.href = '/dashboard';
+          }
+
+          // Check for pending doctor share token
+          const pendingDoctorToken = localStorage.getItem('pending_doctor_token');
+          if (pendingDoctorToken) {
+            localStorage.removeItem('pending_doctor_token');
+            await supabase
+              .from('doctors')
+              .update({ auth_user_id: session.user.id, status: 'active' })
+              .eq('share_token', pendingDoctorToken);
             window.location.href = '/dashboard';
           }
         } else {
