@@ -332,7 +332,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
 
 // ─── AI API HELPERS ───
 
-const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL || 'https://dutvbquoyjtoctjstbmv.supabase.co'}/functions/v1/health-ai`;
+const EDGE_URL = `https://cxgflrxcvtexibcbthie.supabase.co/functions/v1/health-ai`;
 
 async function triggerReportProcessing(reportId: string, fileUrl: string, reportType: string, memberId: string) {
   try {
