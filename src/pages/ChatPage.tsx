@@ -230,6 +230,8 @@ function ConferenceRoom({
 }) {
   const [input, setInput] = useState('');
   const [rounds, setRounds] = useState(1);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const isLoading = room.loading.atlas || room.loading.nova;
@@ -303,6 +305,39 @@ function ConferenceRoom({
         allMsgs = [...allMsgs, aDis, nDis];
         setRoom(prev => ({ ...prev, messages: allMsgs, loading: { atlas: false, nova: false } }));
       }
+
+      // Generate joint summary
+      setGeneratingSummary(true);
+      const convoTranscript = allMsgs
+        .filter(m => m.sender !== 'system')
+        .map(m => {
+          const label = m.sender === 'user' ? 'Patient' : m.sender === 'atlas' ? 'Dr. Atlas' : 'Dr. Nova';
+          return `${label}: ${m.content}`;
+        })
+        .join('\n\n');
+
+      const summaryPrompt = [
+        {
+          role: 'user',
+          content: `Below is a medical consultation between a patient and two doctors (Dr. Atlas and Dr. Nova). Please produce a clear, structured JOINT ASSESSMENT SUMMARY that includes:
+
+1. **Chief Concern** — What the patient asked about
+2. **Key Findings** — What both doctors agree on (bullet points)
+3. **Points of Disagreement** — Where the doctors differed (if any)
+4. **Recommendations** — Combined action items, prioritized
+5. **Follow-Up** — What tests, appointments, or lifestyle changes to consider next
+
+Keep it concise, use plain language (10th grade reading level), and format with headers and bullets.
+
+---
+CONSULTATION TRANSCRIPT:
+${convoTranscript}`
+        }
+      ];
+
+      const summaryText = await sendDualDoctorChat('claude', summaryPrompt, healthContext);
+      setSummary(summaryText);
+      setGeneratingSummary(false);
 
       inputRef.current?.focus();
     },
@@ -428,6 +463,42 @@ function ConferenceRoom({
             )}
           </div>
         )}
+
+        {generatingSummary && (
+          <div className="conference-summary-generating">
+            <Loader size={16} className="spin" />
+            <span>Generating joint assessment summary...</span>
+          </div>
+        )}
+
+        {summary && (
+          <div className="conference-summary">
+            <div className="conference-summary-header">
+              <div className="conference-summary-avatars">
+                <div className="chat-avatar chat-avatar-atlas" style={{ width: 24, height: 24, marginRight: '-6px', zIndex: 2 }}>
+                  <Stethoscope size={11} />
+                </div>
+                <div className="chat-avatar chat-avatar-nova" style={{ width: 24, height: 24 }}>
+                  <Sparkles size={11} />
+                </div>
+              </div>
+              <h3>Joint Assessment Summary</h3>
+            </div>
+            <div className="conference-summary-content">
+              {summary.split('\n').map((line, i) => {
+                if (line.startsWith('## ') || line.startsWith('**') && line.endsWith('**')) {
+                  return <h4 key={i} style={{ marginTop: i > 0 ? '1rem' : 0, marginBottom: '0.35rem', fontSize: 'var(--text-sm)', fontWeight: 700 }}>{line.replace(/^##\s*/, '').replace(/\*\*/g, '')}</h4>;
+                }
+                if (line.startsWith('- ') || line.startsWith('• ')) {
+                  return <div key={i} style={{ paddingLeft: '1rem', position: 'relative', marginBottom: '0.25rem' }}><span style={{ position: 'absolute', left: 0 }}>•</span> {line.replace(/^[-•]\s*/, '').replace(/\*\*/g, '')}</div>;
+                }
+                if (line.trim() === '') return <div key={i} style={{ height: '0.5rem' }} />;
+                return <p key={i} style={{ margin: '0.25rem 0' }}>{line.replace(/\*\*/g, '')}</p>;
+              })}
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 

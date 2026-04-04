@@ -1381,3 +1381,35 @@ input, select, textarea { font-family: inherit; }
   .lab-categories-grid { grid-template-columns: 1fr; }
   .lab-metric-detail-header { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── Conference Summary ── */
+.conference-summary {
+  margin: 1rem 0.75rem; padding: 1.25rem;
+  background: linear-gradient(135deg, rgba(59,130,246,0.06), rgba(168,85,247,0.06));
+  border: 1px solid rgba(139,92,246,0.2);
+  border-radius: var(--radius-lg);
+  animation: fadeIn 400ms ease;
+}
+.conference-summary-header {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin-bottom: 1rem; padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(139,92,246,0.15);
+}
+.conference-summary-header h3 {
+  margin: 0; font-size: var(--text-sm); font-weight: 700;
+  background: linear-gradient(135deg, #3b82f6, #a855f7);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.conference-summary-avatars { display: flex; align-items: center; }
+.conference-summary-content {
+  font-size: var(--text-sm); line-height: 1.65; color: var(--color-tx);
+}
+.conference-summary-generating {
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 1rem; margin: 0.75rem;
+  background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.12);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm); color: var(--color-tx-muted);
+  animation: fadeIn 300ms ease;
+}
