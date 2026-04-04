@@ -68,7 +68,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               <div className="sidebar-user-name">{email}</div>
             </div>
           )}
-          <button className="sidebar-logout" onClick={signOut} title="Sign out">
+          <button className="sidebar-logout" onClick={() => { signOut(); localStorage.clear(); window.location.href = '/'; }} title="Sign out" style={{ display: 'flex' }}>
             <LogOut size={16} />
           </button>
         </div>
