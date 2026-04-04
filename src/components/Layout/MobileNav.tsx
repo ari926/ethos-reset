@@ -16,11 +16,11 @@ const primaryNav = [
 ];
 
 const moreNav = [
-  { to: '/body', label: '3D Body' },
+  { to: '/doctors', label: 'My Doctors' },
   { to: '/reports', label: 'Reports' },
   { to: '/restrictions', label: 'Restrictions' },
+  { to: '/body', label: '3D Body' },
   { to: '/wearables', label: 'Wearables' },
-  { to: '/doctors', label: 'Doctors' },
 ];
 
 export default function MobileNav() {
