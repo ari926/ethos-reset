@@ -23,7 +23,7 @@ const navItems = [
   { to: '/restrictions', icon: ShieldAlert, label: 'Restrictions' },
   { to: '/scanner', icon: Camera, label: 'Scanner' },
   { to: '/wearables', icon: Watch, label: 'Wearables' },
-  { to: '/chat', icon: MessageCircle, label: 'AI Chat' },
+  { to: '/doctor-ai', icon: MessageCircle, label: 'Doctor AI' },
   { to: '/doctors', icon: Stethoscope, label: 'Doctors' },
   { to: '/family', icon: Users, label: 'Family' },
 ];

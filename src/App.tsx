@@ -51,7 +51,7 @@ export default function App() {
             <Route path="/restrictions" element={<RestrictionsPage />} />
             <Route path="/scanner" element={<ScannerPage />} />
             <Route path="/wearables" element={<WearablesPage />} />
-            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/doctor-ai" element={<ChatPage />} />
             <Route path="/doctors" element={<DoctorsPage />} />
             <Route path="/family" element={<FamilyPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

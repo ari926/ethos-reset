@@ -1236,3 +1236,68 @@ input, select, textarea { font-family: inherit; }
   /* Body side panel even more compact */
   .body-side-panel { max-height: 40vh; padding: 0.75rem; }
 }
+
+/* ── Doctor AI Tabs ── */
+.doctor-ai-page { display: flex; flex-direction: column; height: calc(100vh - 4rem); }
+.doctor-ai-tabs {
+  display: flex; gap: 0; margin-bottom: 0;
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  overflow: hidden;
+}
+.doctor-ai-tab {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0.85rem 1rem; font-size: var(--text-sm); font-weight: 500;
+  background: transparent; border: none; color: var(--color-tx-muted);
+  cursor: pointer; transition: all 200ms ease; position: relative;
+  border-bottom: 2px solid transparent;
+}
+.doctor-ai-tab:hover { background: var(--color-surface-offset); color: var(--color-tx); }
+.doctor-ai-tab.active { color: var(--color-tx); }
+.doctor-ai-tab-atlas.active { border-bottom-color: #3b82f6; color: #3b82f6; }
+.doctor-ai-tab-nova.active { border-bottom-color: #a855f7; color: #a855f7; }
+.doctor-ai-tab-conference.active { border-bottom-color: var(--color-primary); color: var(--color-primary); }
+.doctor-ai-tab-label { font-weight: 600; }
+.doctor-ai-tab-sub { font-size: var(--text-xs); color: var(--color-tx-faint); }
+.doctor-ai-tab-badge {
+  font-size: 10px; min-width: 18px; height: 18px; padding: 0 5px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-surface-offset); border-radius: var(--radius-full);
+  color: var(--color-tx-muted); font-weight: 600;
+}
+
+/* ── Doctor Room ── */
+.doctor-room {
+  flex: 1; display: flex; flex-direction: column;
+  background: var(--color-surface);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border: 1px solid var(--color-divider); border-top: none;
+  min-height: 0;
+}
+.doctor-room-header {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-divider);
+}
+.doctor-room-header h3 { margin: 0; font-size: var(--text-sm); font-weight: 600; }
+.conference-avatars { display: flex; align-items: center; }
+
+/* ── System divider in conference ── */
+.chat-system-divider {
+  display: flex; align-items: center; justify-content: center;
+  padding: 0.75rem 1rem; margin: 0.5rem 0;
+}
+.chat-system-divider span {
+  font-size: 11px; font-weight: 600; color: var(--color-tx-faint);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 0.25rem 0.75rem;
+  background: var(--color-surface-offset);
+  border-radius: var(--radius-full);
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .doctor-ai-tab-sub { display: none; }
+  .doctor-ai-tab { padding: 0.65rem 0.5rem; font-size: var(--text-xs); }
+}
