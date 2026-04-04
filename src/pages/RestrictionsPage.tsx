@@ -1,18 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useHealthStore, type Restriction, type HealthMetric } from '../stores/healthStore';
-import { ShieldAlert, Plus, Trash2, Edit2, Utensils, Dna, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import { Utensils, Dna, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatDate } from '../lib/utils';
 import RestrictionModal from '../components/Restrictions/RestrictionModal';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import Modal from '../components/common/Modal';
 
-const QUICK_ADD_PRESETS = [
-  'Peanuts', 'Tree Nuts', 'Shellfish', 'Dairy', 'Gluten', 'Eggs', 'Soy',
-  'Penicillin', 'Aspirin', 'NSAIDs', 'Sulfa Drugs', 'Latex',
-];
-
-type RestrictionsTab = 'manual' | 'food' | 'genetics';
+type RestrictionsTab = 'food' | 'genetics';
 
 /* ── Food Sensitivity helpers ── */
 interface FoodSensitivity {
@@ -697,119 +692,14 @@ function GeneticsTab({ memberId }: { memberId: string | null }) {
   );
 }
 
-/* ── Manual Restrictions Tab (original content) ── */
-function ManualRestrictionsTab({
-  restrictions,
-  activeMemberId,
-  onAdd,
-  onEdit,
-  onDelete,
-}: {
-  restrictions: Restriction[];
-  activeMemberId: string | null;
-  onAdd: (item: string) => void;
-  onEdit: (r: Restriction) => void;
-  onDelete: (id: string) => void;
-}) {
-  const confirmed = restrictions.filter(r => r.confirmed);
-  const suggested = restrictions.filter(r => !r.confirmed);
-
-  return (
-    <div>
-      {activeMemberId && (
-        <div className="section">
-          <h3 className="section-title">Quick Add Common Allergens</h3>
-          <div className="restriction-chips">
-            {QUICK_ADD_PRESETS.map(item => (
-              <button
-                key={item}
-                className="badge badge-muted"
-                style={{ cursor: 'pointer' }}
-                onClick={() => onAdd(item)}
-                disabled={restrictions.some(r => r.item_name === item)}
-              >
-                + {item}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {suggested.length > 0 && (
-        <div className="section">
-          <h3 className="section-title" style={{ color: 'var(--color-warning)' }}>
-            AI-Suggested Restrictions ({suggested.length})
-          </h3>
-          <div className="restriction-list">
-            {suggested.map(r => (
-              <div key={r.id} className="restriction-item suggested">
-                <div className="restriction-info">
-                  <span className={`badge badge-${r.severity === 'critical' ? 'error' : 'warning'}`}>{r.restriction_type.replace(/_/g, ' ')}</span>
-                  <strong>{r.item_name}</strong>
-                  {r.reaction && <span className="restriction-reaction">{r.reaction}</span>}
-                </div>
-                <div className="restriction-actions">
-                  <button className="btn btn-sm btn-primary" onClick={() => {/* confirm */}}>Confirm</button>
-                  <button className="btn btn-sm btn-ghost" onClick={() => onDelete(r.id)}>Dismiss</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {confirmed.length === 0 && suggested.length === 0 ? (
-        <div className="empty-state">
-          <ShieldAlert size={48} />
-          <h2>No restrictions</h2>
-          <p>Add food allergies, drug interactions, or dietary restrictions for this family member.</p>
-        </div>
-      ) : (
-        <div className="restriction-list">
-          {confirmed.map(r => (
-            <div key={r.id} className="restriction-item">
-              <div className="restriction-info">
-                <span className={`severity-dot severity-${r.severity}`} />
-                <span className="badge badge-muted">{r.restriction_type.replace(/_/g, ' ')}</span>
-                <strong>{r.item_name}</strong>
-                {r.reaction && <span className="restriction-reaction">{'\u2014'} {r.reaction}</span>}
-              </div>
-              <div className="restriction-actions">
-                <button className="btn btn-sm btn-ghost" onClick={() => onEdit(r)}>
-                  <Edit2 size={14} />
-                </button>
-                <button className="btn btn-sm btn-ghost" style={{ color: 'var(--color-error)' }} onClick={() => onDelete(r.id)}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ── Main Page ── */
 export default function RestrictionsPage() {
-  const { restrictions, activeMemberId, familyMembers, addRestriction, deleteRestriction } = useHealthStore();
+  const { activeMemberId, familyMembers, deleteRestriction } = useHealthStore();
   const member = familyMembers.find(m => m.id === activeMemberId);
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<Restriction | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<RestrictionsTab>('food');
-
-  const handleQuickAdd = (item: string) => {
-    if (!activeMemberId) return;
-    addRestriction({
-      member_id: activeMemberId,
-      restriction_type: 'food_allergy',
-      item_name: item,
-      severity: 'warning',
-      source: 'manual',
-      confirmed: true,
-    });
-  };
 
   return (
     <div>
