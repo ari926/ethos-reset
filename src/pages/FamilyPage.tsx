@@ -23,6 +23,8 @@ export default function FamilyPage() {
     }
   };
 
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+
   const generateInviteLink = async (member: FamilyMember) => {
     const token = crypto.randomUUID();
     const { error } = await supabase
@@ -34,8 +36,27 @@ export default function FamilyPage() {
       return;
     }
     const link = `${window.location.origin}/invite/${token}`;
-    await navigator.clipboard.writeText(link);
-    toast.success('Invite link copied to clipboard!');
+
+    // Try native share (mobile), fallback to clipboard, fallback to showing link
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Ethos Reset Invite',
+          text: `Join my family health profile on Ethos Reset`,
+          url: link,
+        });
+        toast.success('Invite shared!');
+      } catch {
+        setInviteLink(link);
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(link);
+        toast.success('Invite link copied to clipboard!');
+      } catch {
+        setInviteLink(link);
+      }
+    }
     loadFamilyMembers();
   };
 
@@ -94,11 +115,14 @@ export default function FamilyPage() {
                       <CheckCircle size={12} /> Linked
                     </span>
                   ) : member.invite_token && member.invite_status === 'pending' ? (
-                    <button className="btn btn-sm btn-ghost" title="Copy invite link" onClick={(e) => {
+                    <button className="btn btn-sm btn-ghost" title="Share invite link" onClick={async (e) => {
                       e.stopPropagation();
                       const link = `${window.location.origin}/invite/${member.invite_token}`;
-                      navigator.clipboard.writeText(link);
-                      toast.success('Invite link copied!');
+                      if (navigator.share) {
+                        try { await navigator.share({ title: 'Ethos Reset Invite', url: link }); } catch { setInviteLink(link); }
+                      } else {
+                        try { await navigator.clipboard.writeText(link); toast.success('Invite link copied!'); } catch { setInviteLink(link); }
+                      }
                     }}>
                       <Copy size={14} /> <span style={{ fontSize: 'var(--text-xs)' }}>Pending</span>
                     </button>
@@ -134,6 +158,48 @@ export default function FamilyPage() {
         title="Remove Family Member"
         message="This will permanently delete this family member and all their health data. This cannot be undone."
       />
+
+      {/* Invite link fallback dialog (when clipboard/share fails) */}
+      {inviteLink && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem',
+        }} onClick={() => setInviteLink(null)}>
+          <div style={{
+            background: 'var(--color-surface, #fff)', borderRadius: 'var(--radius-lg, 12px)',
+            padding: '1.5rem', maxWidth: '420px', width: '100%', boxShadow: 'var(--shadow-lg)',
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: 'var(--text-base)' }}>Invite Link</h3>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-tx-muted)', margin: '0 0 1rem' }}>
+              Copy this link and send it to your family member:
+            </p>
+            <input
+              type="text"
+              readOnly
+              value={inviteLink}
+              className="input-field"
+              style={{ fontSize: 'var(--text-xs)', marginBottom: '1rem' }}
+              onFocus={e => e.target.select()}
+            />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(inviteLink);
+                  toast.success('Copied!');
+                  setInviteLink(null);
+                } catch {
+                  toast('Long-press the link above to copy it');
+                }
+              }}>
+                <Copy size={14} /> Copy Link
+              </button>
+              <button className="btn btn-secondary" onClick={() => setInviteLink(null)}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
