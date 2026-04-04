@@ -416,8 +416,23 @@ ${convoTranscript}`
           </div>
         )}
 
-        {room.messages.map(msg => (
-          msg.sender === 'system' ? (
+        {room.messages.map((msg, idx) => (
+          msg.sender === 'user' && idx > 0 && room.messages[idx - 1]?.sender === 'summary' ? (
+            <div key={msg.id}>
+              <div className="chat-system-divider" style={{ margin: '1.5rem 0', borderColor: 'var(--color-primary, #2dd4bf)', opacity: 0.4 }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)' }}>Follow-up</span>
+              </div>
+              <div className={`chat-message chat-message-user`}>
+                <div className="chat-msg-body">
+                  <div className="chat-message-content">
+                    {msg.content.split('\n').map((line, j) => (
+                      <span key={j}>{line}{j < msg.content.split('\n').length - 1 && <br />}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : msg.sender === 'system' ? (
             <div key={msg.id} className="chat-system-divider">
               <span>{msg.content}</span>
             </div>
