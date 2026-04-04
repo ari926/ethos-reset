@@ -708,19 +708,20 @@ export async function analyzeScanImage(
   imageBase64: string,
   mimeType: string,
   scanType: string,
-  memberId: string,
+  _memberId: string,
   restrictions: Array<{ item_name: string; severity: string; restriction_type: string; reaction?: string | null }>
 ): Promise<ScanResult | null> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch(EDGE_URL, {
+    const res = await fetch(HEALTH_AI_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token ?? ''}`,
-        'x-action': 'analyze-scan',
-      },
-      body: JSON.stringify({ image_base64: imageBase64, mime_type: mimeType, scan_type: scanType, member_id: memberId, restrictions }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'scan',
+        image_base64: imageBase64,
+        mime_type: mimeType,
+        scan_type: scanType,
+        restrictions,
+      }),
     });
     if (!res.ok) return null;
     return await res.json() as ScanResult;

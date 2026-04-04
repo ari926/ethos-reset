@@ -1,5 +1,5 @@
 // Ethos Reset — Health AI Worker
-// Routes: /chat (dual doctor), /process-report (PDF extraction)
+// Routes: /chat (dual doctor), /process-report (PDF extraction), /scan (food/medicine scanner)
 
 interface Env {
   ANTHROPIC_API_KEY: string;
@@ -20,7 +20,15 @@ type ProcessRequestBody = {
   title: string;
 };
 
-type RequestBody = ChatRequestBody | ProcessRequestBody;
+type ScanRequestBody = {
+  action: 'scan';
+  image_base64: string;
+  mime_type: string;
+  scan_type: 'food' | 'medicine';
+  restrictions: Array<{ item_name: string; severity: string; restriction_type: string; reaction?: string | null }>;
+};
+
+type RequestBody = ChatRequestBody | ProcessRequestBody | ScanRequestBody;
 
 const CORS_ORIGINS = [
   'https://ethosreset.com',
@@ -469,6 +477,110 @@ export default {
         const result = await processReport(env, file_url, report_type, title);
 
         return new Response(JSON.stringify(result), {
+          status: 200,
+          headers: { ...headers, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Route: Scan (food/medicine image analysis)
+      if ('action' in body && body.action === 'scan') {
+        const scanBody = body as ScanRequestBody;
+        const { image_base64, mime_type, scan_type, restrictions } = scanBody;
+
+        if (!image_base64) {
+          return new Response(JSON.stringify({ error: 'Missing image_base64' }), {
+            status: 400,
+            headers: { ...headers, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const restrictionList = restrictions.length > 0
+          ? restrictions.map(r => `- ${r.item_name} (${r.restriction_type}, ${r.severity}${r.reaction ? ', reaction: ' + r.reaction : ''})`).join('\n')
+          : 'No known restrictions on file.';
+
+        const scanSystemPrompt = scan_type === 'medicine'
+          ? `You are a medication safety checker. The user will show you an image of a medication (pill bottle, box, prescription label, etc.).
+
+Your job:
+1. Identify the medication from the image (name, dosage, form)
+2. List the active ingredients and common inactive ingredients
+3. Check against the patient's known restrictions/allergies listed below
+4. Flag any dangerous interactions, contraindications, or allergens
+
+PATIENT RESTRICTIONS:
+${restrictionList}
+
+Respond with valid JSON only — no markdown, no explanation outside the JSON:
+{
+  "item_name": "Name of the medication",
+  "overall_result": "safe" | "unsafe" | "caution",
+  "ingredients": ["list", "of", "key", "ingredients"],
+  "flagged": [
+    { "ingredient": "flagged ingredient", "severity": "critical|warning", "reason": "why it's flagged" }
+  ],
+  "explanation": "1-3 sentence plain English summary of whether this medication is safe for this patient and why"
+}`
+          : `You are a food safety checker. The user will show you an image of food (a dish, packaged food, ingredients, menu item, etc.).
+
+Your job:
+1. Identify what the food is from the image
+2. List the likely ingredients (be thorough — include hidden allergens like dairy in sauces, gluten in breadings, nuts in garnishes)
+3. Check against the patient's known food restrictions/allergies/sensitivities listed below
+4. Flag any ingredients that match restrictions
+
+PATIENT RESTRICTIONS:
+${restrictionList}
+
+Respond with valid JSON only — no markdown, no explanation outside the JSON:
+{
+  "item_name": "Name of the food/dish",
+  "overall_result": "safe" | "unsafe" | "caution",
+  "ingredients": ["list", "of", "likely", "ingredients"],
+  "flagged": [
+    { "ingredient": "flagged ingredient", "severity": "critical|warning", "reason": "why it's flagged based on patient restrictions" }
+  ],
+  "explanation": "1-3 sentence plain English summary of whether this food is safe for this patient and why"
+}`;
+
+        // Use GPT-4o for vision (great at image analysis)
+        const scanMessages = [{
+          role: 'user' as const,
+          content: [
+            { type: 'image_url' as const, image_url: { url: `data:${mime_type};base64,${image_base64}` } },
+            { type: 'text' as const, text: `Analyze this ${scan_type} image. Respond with valid JSON only.` },
+          ],
+        }];
+
+        const scanRes = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            max_tokens: 1024,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: scanSystemPrompt },
+              ...scanMessages,
+            ],
+          }),
+        });
+
+        if (!scanRes.ok) {
+          const errText = await scanRes.text();
+          throw new Error(`OpenAI scan error ${scanRes.status}: ${errText}`);
+        }
+
+        const scanData = await scanRes.json() as { choices: Array<{ message: { content: string } }> };
+        let scanJson = scanData.choices[0]?.message?.content ?? '{}';
+        if (scanJson.startsWith('```')) {
+          scanJson = scanJson.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+        }
+
+        const parsed = JSON.parse(scanJson);
+        return new Response(JSON.stringify(parsed), {
           status: 200,
           headers: { ...headers, 'Content-Type': 'application/json' },
         });
