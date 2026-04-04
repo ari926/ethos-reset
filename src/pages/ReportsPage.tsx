@@ -21,6 +21,66 @@ const REPORT_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
+/* ── Auto-extract date, type, and clean title from filename ── */
+function parseReportFilename(raw: string): { title: string; type: string; date: string | null } {
+  let title = raw;
+  let type = 'lab_results';
+  let date: string | null = null;
+
+  // Detect report type from keywords
+  const lower = raw.toLowerCase();
+  if (/\bmri\b|imaging|x[\s-]?ray|ct\b|cta\b|dexa|ultrasound|scan/i.test(lower)) type = 'imaging';
+  else if (/\bstool\b|gi[\s-]?map|microbiome/i.test(lower)) type = 'stool_test';
+  else if (/\bdr\.|doctor|appt|notes|tetlow|leist|wolk|phone notes|summary|supplement|intake/i.test(lower)) type = 'doctor_notes';
+  else if (/\bgenetic|genome|3x4|dna\b/i.test(lower)) type = 'genetic';
+  else if (/\blyme|mycotox|zoomer|glyphosate|antigen|p88|grail|metal test|hair analysis/i.test(lower)) type = 'specialty';
+  else if (/\blab\b|labcorp|vibrant|blood/i.test(lower)) type = 'lab_results';
+
+  // Try to extract date patterns
+
+  // Pattern: "M-D-YY" or "M-DD-YY" (e.g., "2 24 23", "12 2 24", "11 18 24")
+  const mdyy = raw.match(/(\d{1,2})[\s\-\/](\d{1,2})[\s\-\/](\d{2})\b/);
+  if (mdyy) {
+    const m = parseInt(mdyy[1]);
+    const d = parseInt(mdyy[2]);
+    let y = parseInt(mdyy[3]);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      y = y < 50 ? 2000 + y : 1900 + y;
+      date = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  // Pattern: month name + year (e.g., "May 2023", "June 2025", "Oct. 2025", "Nov 2024")
+  if (!date) {
+    const monthYear = raw.match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b\.?\s*(\d{4})/i);
+    if (monthYear) {
+      const months: Record<string, string> = {
+        jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+        jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+      };
+      const monthKey = monthYear[1].toLowerCase().slice(0, 3);
+      const mm = months[monthKey];
+      if (mm) date = `${monthYear[2]}-${mm}-01`;
+    }
+  }
+
+  // Pattern: standalone 4-digit year (e.g., "2016", "2019", "2022")
+  if (!date) {
+    const yearOnly = raw.match(/\b(20\d{2})\b/);
+    if (yearOnly) {
+      date = `${yearOnly[1]}-01-01`;
+    }
+  }
+
+  // Clean up title: remove "copy", trailing numbers, extra spaces
+  title = title
+    .replace(/\bcopy\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return { title, type, date };
+}
+
 function getReportYear(report: HealthReport): string {
   if (report.report_date) {
     return new Date(report.report_date).getFullYear().toString();
@@ -217,12 +277,14 @@ function UploadModal({ open, onClose, memberId, onUpload }: {
     setUploading(true);
     setUploadProgress(0);
 
-    const dateVal = reportDate || null;
-
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const title = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-      await onUpload(memberId, file, title, reportType, dateVal);
+      const rawName = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+      const { title, type, date } = parseReportFilename(rawName);
+      // Use user-selected values as override, otherwise use auto-detected
+      const finalType = reportType !== 'lab_results' ? reportType : type;
+      const finalDate = reportDate || date;
+      await onUpload(memberId, file, title, finalType, finalDate);
       setUploadProgress(Math.round(((i + 1) / files.length) * 100));
     }
 
