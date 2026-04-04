@@ -325,7 +325,7 @@ function LabExplorer() {
 type ReportsTab = 'documents' | 'labs';
 
 export default function ReportsPage() {
-  const { reports, activeMemberId, familyMembers, uploadReport, deleteReport } = useHealthStore();
+  const { reports, activeMemberId, familyMembers, uploadReport, deleteReport, processReport } = useHealthStore();
   const member = familyMembers.find(m => m.id === activeMemberId);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [detailReport, setDetailReport] = useState<HealthReport | null>(null);
@@ -506,6 +506,7 @@ export default function ReportsPage() {
           report={detailReport}
           onClose={() => setDetailReport(null)}
           onDelete={(id) => { setDeleteId(id); setDetailReport(null); }}
+          onProcess={(id) => { processReport(id); }}
         />
       )}
 
@@ -655,10 +656,11 @@ function UploadModal({ open, onClose, memberId, onUpload }: {
   );
 }
 
-function ReportDetailModal({ report, onClose, onDelete }: {
+function ReportDetailModal({ report, onClose, onDelete, onProcess }: {
   report: HealthReport;
   onClose: () => void;
   onDelete: (id: string) => void;
+  onProcess: (id: string) => void;
 }) {
   return (
     <Modal open={true} onClose={onClose} title={report.title} wide>
@@ -675,9 +677,29 @@ function ReportDetailModal({ report, onClose, onDelete }: {
             <span className="badge badge-warning">Pending</span>
           )}
         </div>
-        <span style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)' }}>
-          {formatDate(report.report_date)}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)' }}>
+            {formatDate(report.report_date)}
+          </span>
+          {report.processing_status !== 'complete' && report.file_url && (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => onProcess(report.id)}
+              disabled={report.processing_status === 'processing'}
+            >
+              {report.processing_status === 'processing' ? '⏳ Processing...' : '🤖 Analyze with AI'}
+            </button>
+          )}
+          {report.processing_status === 'complete' && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => onProcess(report.id)}
+              title="Re-analyze this report"
+            >
+              🔄 Re-analyze
+            </button>
+          )}
+        </div>
       </div>
 
       {report.ai_summary && (

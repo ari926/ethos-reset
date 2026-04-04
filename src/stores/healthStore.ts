@@ -139,6 +139,7 @@ interface HealthState {
   updateRestriction: (id: string, updates: Partial<Restriction>) => Promise<void>;
   deleteRestriction: (id: string) => Promise<void>;
   uploadReport: (memberId: string, file: File, title: string, reportType: string, reportDate: string | null) => Promise<void>;
+  processReport: (reportId: string) => Promise<void>;
   deleteReport: (id: string) => Promise<void>;
   addVital: (vital: Partial<Vital>) => Promise<void>;
   computeRegionHealth: () => void;
@@ -321,6 +322,20 @@ export const useHealthStore = create<HealthState>((set, get) => ({
         get().loadMemberData(memberId);
       });
     }
+  },
+
+  processReport: async (reportId: string) => {
+    const report = get().reports.find(r => r.id === reportId);
+    if (!report || !report.file_url) {
+      toast.error('No file to process');
+      return;
+    }
+    const memberId = get().activeMemberId;
+    if (!memberId) return;
+
+    toast('AI analyzing report...', { icon: '🤖' });
+    await triggerReportProcessing(reportId, report.file_url, report.report_type, memberId);
+    get().loadMemberData(memberId);
   },
 
   deleteReport: async (id: string) => {
@@ -571,18 +586,83 @@ const EDGE_URL = `https://cxgflrxcvtexibcbthie.supabase.co/functions/v1/health-a
 
 async function triggerReportProcessing(reportId: string, fileUrl: string, reportType: string, memberId: string) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    await fetch(EDGE_URL, {
+    // Update status to processing
+    await supabase.from('health_reports').update({ processing_status: 'processing' }).eq('id', reportId);
+
+    const res = await fetch(HEALTH_AI_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token ?? ''}`,
-        'x-action': 'process-report',
-      },
-      body: JSON.stringify({ report_id: reportId, file_url: fileUrl, report_type: reportType, member_id: memberId }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'process-report',
+        file_url: fileUrl,
+        report_type: reportType,
+        title: '',
+      }),
     });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('Report processing failed:', errText);
+      await supabase.from('health_reports').update({ processing_status: 'failed' }).eq('id', reportId);
+      toast.error('AI processing failed');
+      return;
+    }
+
+    const result = await res.json() as {
+      summary: string;
+      report_type: string;
+      report_date: string | null;
+      body_regions: string[];
+      metrics: Array<{
+        metric_name: string;
+        metric_value: string;
+        metric_unit: string | null;
+        status: string;
+        body_region: string;
+        ref_range_low: number | null;
+        ref_range_high: number | null;
+        recorded_date: string | null;
+      }>;
+    };
+
+    // Update the report with AI results
+    await supabase.from('health_reports').update({
+      processing_status: 'complete',
+      ai_summary: result.summary,
+      body_regions: result.body_regions,
+      report_type: result.report_type || reportType,
+      report_date: result.report_date || undefined,
+    }).eq('id', reportId);
+
+    // Insert extracted metrics into health_metrics
+    if (result.metrics && result.metrics.length > 0) {
+      const metricsToInsert = result.metrics.map(m => ({
+        member_id: memberId,
+        metric_name: m.metric_name,
+        metric_value: m.metric_value,
+        metric_unit: m.metric_unit,
+        status: m.status,
+        body_region: m.body_region,
+        recorded_date: m.recorded_date || result.report_date,
+        ref_range_low: m.ref_range_low,
+        ref_range_high: m.ref_range_high,
+        source: 'ai_extraction',
+        report_id: reportId,
+      }));
+
+      const { error: metricsError } = await supabase.from('health_metrics').insert(metricsToInsert);
+      if (metricsError) {
+        console.error('Failed to insert extracted metrics:', metricsError);
+      } else {
+        toast.success(`AI extracted ${result.metrics.length} metrics from report`);
+      }
+    } else {
+      toast.success('AI processed report (no lab values found)');
+    }
   } catch (err) {
     console.error('Report processing trigger failed:', err);
+    await supabase.from('health_reports').update({ processing_status: 'failed' }).eq('id', reportId);
+    toast.error('AI processing failed');
   }
 }
 
