@@ -461,9 +461,15 @@ export default function ReportsPage() {
                               {r.report_type.replace(/_/g, ' ')} · {formatDate(r.report_date)}
                             </div>
                           </div>
-                          <span className={`badge badge-${r.processing_status === 'complete' ? 'success' : r.processing_status === 'failed' ? 'error' : 'muted'}`}>
-                            {r.processing_status}
-                          </span>
+                          {r.processing_status === 'complete' ? (
+                            <span className="badge badge-success" title="AI analyzed — data extracted to Lab Explorer">✓ AI Analyzed</span>
+                          ) : r.processing_status === 'failed' ? (
+                            <span className="badge badge-error">Failed</span>
+                          ) : r.processing_status === 'uploaded' ? (
+                            <span className="badge badge-muted" title="Document uploaded but not yet analyzed by AI">Uploaded</span>
+                          ) : (
+                            <span className="badge badge-warning" title="Waiting for AI analysis">Pending</span>
+                          )}
                         </div>
                         {r.ai_summary && (
                           <p className="report-card-summary">{r.ai_summary}</p>
@@ -659,9 +665,15 @@ function ReportDetailModal({ report, onClose, onDelete }: {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <div>
           <span className="badge badge-muted" style={{ marginRight: '0.5rem' }}>{report.report_type.replace(/_/g, ' ')}</span>
-          <span className={`badge badge-${report.processing_status === 'complete' ? 'success' : report.processing_status === 'failed' ? 'error' : 'muted'}`}>
-            {report.processing_status}
-          </span>
+          {report.processing_status === 'complete' ? (
+            <span className="badge badge-success">✓ AI Analyzed</span>
+          ) : report.processing_status === 'uploaded' ? (
+            <span className="badge badge-muted">Uploaded</span>
+          ) : report.processing_status === 'failed' ? (
+            <span className="badge badge-error">Failed</span>
+          ) : (
+            <span className="badge badge-warning">Pending</span>
+          )}
         </div>
         <span style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)' }}>
           {formatDate(report.report_date)}
