@@ -4,6 +4,7 @@ import {
   Activity,
   Camera,
   MessageCircle,
+  Users,
   MoreHorizontal,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -12,7 +13,8 @@ const primaryNav = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Home' },
   { to: '/body', icon: Activity, label: 'Body' },
   { to: '/scanner', icon: Camera, label: 'Scan' },
-  { to: '/chat', icon: MessageCircle, label: 'Chat' },
+  { to: '/doctor-ai', icon: MessageCircle, label: 'Chat' },
+  { to: '/family', icon: Users, label: 'Family' },
 ];
 
 const moreNav = [
@@ -20,7 +22,6 @@ const moreNav = [
   { to: '/restrictions', label: 'Restrictions' },
   { to: '/wearables', label: 'Wearables' },
   { to: '/doctors', label: 'Doctors' },
-  { to: '/family', label: 'Family' },
 ];
 
 export default function MobileNav() {
