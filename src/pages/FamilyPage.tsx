@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useHealthStore, type FamilyMember } from '../stores/healthStore';
 import { useAuthStore } from '../stores/authStore';
-import { Plus, Edit2, Trash2, Users } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Plus, Edit2, Trash2, Users, UserPlus, CheckCircle, Copy } from 'lucide-react';
 import { getInitials, memberColor, calculateAge, formatDate } from '../lib/utils';
 import MemberModal from '../components/Family/MemberModal';
 import ConfirmDialog from '../components/common/ConfirmDialog';
+import toast from 'react-hot-toast';
 
 export default function FamilyPage() {
-  const { familyMembers, addFamilyMember, updateFamilyMember, deleteFamilyMember, activeMemberId, setActiveMember } = useHealthStore();
+  const { familyMembers, addFamilyMember, updateFamilyMember, deleteFamilyMember, activeMemberId, setActiveMember, loadFamilyMembers } = useHealthStore();
   const { user } = useAuthStore();
   const [modalOpen, setModalOpen] = useState(false);
   const [editMember, setEditMember] = useState<FamilyMember | null>(null);
@@ -19,6 +21,22 @@ export default function FamilyPage() {
     } else {
       addFamilyMember({ ...data, owner_id: user?.id ?? null });
     }
+  };
+
+  const generateInviteLink = async (member: FamilyMember) => {
+    const token = crypto.randomUUID();
+    const { error } = await supabase
+      .from('family_members')
+      .update({ invite_token: token, invite_status: 'pending' })
+      .eq('id', member.id);
+    if (error) {
+      toast.error('Failed to generate invite link');
+      return;
+    }
+    const link = `${window.location.origin}/invite/${token}`;
+    await navigator.clipboard.writeText(link);
+    toast.success('Invite link copied to clipboard!');
+    loadFamilyMembers();
   };
 
   return (
@@ -71,6 +89,24 @@ export default function FamilyPage() {
                   )}
                 </div>
                 <div className="member-card-actions">
+                  {member.auth_user_id ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: 'var(--text-xs)', color: 'var(--color-success)', fontWeight: 500 }}>
+                      <CheckCircle size={12} /> Linked
+                    </span>
+                  ) : member.invite_token && member.invite_status === 'pending' ? (
+                    <button className="btn btn-sm btn-ghost" title="Copy invite link" onClick={(e) => {
+                      e.stopPropagation();
+                      const link = `${window.location.origin}/invite/${member.invite_token}`;
+                      navigator.clipboard.writeText(link);
+                      toast.success('Invite link copied!');
+                    }}>
+                      <Copy size={14} /> <span style={{ fontSize: 'var(--text-xs)' }}>Pending</span>
+                    </button>
+                  ) : member.id !== '00000000-0000-0000-0000-000000000001' ? (
+                    <button className="btn btn-sm btn-ghost" title="Invite to app" style={{ color: 'var(--color-primary)' }} onClick={(e) => { e.stopPropagation(); generateInviteLink(member); }}>
+                      <UserPlus size={14} />
+                    </button>
+                  ) : null}
                   <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); setEditMember(member); setModalOpen(true); }}>
                     <Edit2 size={14} />
                   </button>

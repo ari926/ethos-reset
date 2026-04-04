@@ -37,6 +37,20 @@ export const useAuthStore = create<AuthState>((set) => ({
         if (session) {
           const isDoctor = await checkDoctorStatus(session.user.id);
           set({ session, user: session.user, isDoctor });
+
+          // Check for pending invite token (set before Google OAuth redirect)
+          const pendingToken = localStorage.getItem('pending_invite_token');
+          if (pendingToken) {
+            localStorage.removeItem('pending_invite_token');
+            // Accept the invite by linking auth_user_id
+            await supabase
+              .from('family_members')
+              .update({ auth_user_id: session.user.id, invite_status: 'accepted' })
+              .eq('invite_token', pendingToken)
+              .eq('invite_status', 'pending');
+            // Redirect to dashboard
+            window.location.href = '/dashboard';
+          }
         } else {
           set({ session: null, user: null, isDoctor: false });
         }

@@ -17,6 +17,9 @@ export interface FamilyMember {
   weight_kg: number | null;
   avatar_url: string | null;
   notes: string | null;
+  invite_token?: string | null;
+  invite_email?: string | null;
+  invite_status?: string | null;
 }
 
 export interface Restriction {

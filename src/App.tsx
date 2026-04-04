@@ -14,6 +14,7 @@ import WearablesPage from './pages/WearablesPage';
 import ChatPage from './pages/ChatPage';
 import DoctorsPage from './pages/DoctorsPage';
 import FamilyPage from './pages/FamilyPage';
+import InvitePage from './pages/InvitePage';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const session = useAuthStore(s => s.session);
@@ -58,22 +59,27 @@ export default function App() {
           },
         }}
       />
-      <AuthGate>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/body" element={<BodyPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/restrictions" element={<RestrictionsPage />} />
-            <Route path="/scanner" element={<ScannerPage />} />
-            <Route path="/wearables" element={<WearablesPage />} />
-            <Route path="/doctor-ai" element={<ChatPage />} />
-            <Route path="/doctors" element={<DoctorsPage />} />
-            <Route path="/family" element={<FamilyPage />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Route>
-        </Routes>
-      </AuthGate>
+      <Routes>
+        <Route path="/invite/:token" element={<InvitePage />} />
+        <Route path="*" element={
+          <AuthGate>
+            <Routes>
+              <Route element={<AppShell />}>
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/body" element={<BodyPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/restrictions" element={<RestrictionsPage />} />
+                <Route path="/scanner" element={<ScannerPage />} />
+                <Route path="/wearables" element={<WearablesPage />} />
+                <Route path="/doctor-ai" element={<ChatPage />} />
+                <Route path="/doctors" element={<DoctorsPage />} />
+                <Route path="/family" element={<FamilyPage />} />
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Route>
+            </Routes>
+          </AuthGate>
+        } />
+      </Routes>
     </BrowserRouter>
   );
 }
