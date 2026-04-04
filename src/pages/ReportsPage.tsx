@@ -99,6 +99,83 @@ const LAB_CATEGORIES: Array<{ key: string; label: string; icon: string; regions:
   { key: 'neuro', label: 'Neurological', icon: '🧠', regions: ['head'], description: 'TSH, prolactin, neurofilament, NMO' },
 ];
 
+/* ── Metric Descriptions (plain-language explanations) ── */
+function getMetricDescription(name: string): string | null {
+  const n = name.toLowerCase();
+  const descriptions: Record<string, string> = {
+    // Blood counts
+    'wbc': 'White blood cells fight infection. A count that is too high can mean your body is fighting off illness, while a low count may mean your immune system is weakened.',
+    'rbc': 'Red blood cells carry oxygen from your lungs to the rest of your body. Low levels can cause fatigue and shortness of breath (anemia), while high levels may thicken your blood.',
+    'hemoglobin': 'Hemoglobin is the protein inside red blood cells that carries oxygen. Low hemoglobin is the hallmark of anemia and can leave you feeling tired and weak.',
+    'hematocrit': 'Hematocrit measures what percentage of your blood is made up of red blood cells. It helps doctors spot anemia or dehydration.',
+    'platelets': 'Platelets help your blood clot when you get a cut. Too few can cause excessive bleeding, and too many can increase risk of blood clots.',
+    'mcv': 'Mean Corpuscular Volume measures the average size of your red blood cells. Abnormal sizes can point to different types of anemia or vitamin deficiencies.',
+    'mch': 'Mean Corpuscular Hemoglobin shows how much hemoglobin is in each red blood cell on average. It helps classify different types of anemia.',
+    'mchc': 'MCHC measures the average concentration of hemoglobin in your red blood cells. It is useful for diagnosing iron deficiency and other blood conditions.',
+    'rdw': 'Red Cell Distribution Width measures how much your red blood cells vary in size. A high number can be an early sign of iron or vitamin deficiency.',
+    'mpv': 'Mean Platelet Volume tells the average size of your platelets. Larger platelets are younger and more active, which can indicate your body is making more to replace ones being used up.',
+    // Lipids
+    'total cholesterol': 'Total cholesterol is the overall amount of cholesterol in your blood. Keeping it in a healthy range reduces your risk of heart disease and stroke.',
+    'ldl cholesterol': 'LDL is often called "bad" cholesterol because high levels cause plaque buildup in your arteries, raising heart attack and stroke risk.',
+    'hdl cholesterol': 'HDL is "good" cholesterol. It helps remove LDL from your arteries and carries it back to the liver for disposal. Higher levels are protective.',
+    'triglycerides': 'Triglycerides are a type of fat in your blood. High levels, especially combined with high LDL or low HDL, increase your risk for heart disease.',
+    'vldl': 'VLDL carries triglycerides through your blood. Like LDL, high levels contribute to plaque buildup in arteries.',
+    'apolipoprotein b': 'ApoB is the main protein on LDL particles. It is considered one of the best single markers for predicting cardiovascular risk.',
+    'apob': 'ApoB is the main protein on LDL particles. It is considered one of the best single markers for predicting cardiovascular risk.',
+    'lp(a)': 'Lipoprotein(a) is a genetic risk factor for heart disease. Unlike regular cholesterol, diet and exercise have little effect on it.',
+    // Liver
+    'ast': 'AST is an enzyme found mainly in the liver and heart. Elevated levels can signal liver damage, muscle injury, or heart problems.',
+    'alt': 'ALT is an enzyme mostly found in the liver. A high level is one of the most specific signs that the liver is inflamed or damaged.',
+    'alkaline phosphatase': 'Alkaline phosphatase (ALP) is an enzyme in the liver and bones. High levels may point to liver disease, bile duct problems, or bone disorders.',
+    'bilirubin': 'Bilirubin is a yellow pigment produced when red blood cells break down. High levels cause jaundice and may indicate liver or gallbladder issues.',
+    'albumin': 'Albumin is a protein made by the liver that keeps fluid in your bloodstream. Low levels can indicate liver disease, kidney problems, or malnutrition.',
+    'total protein': 'Total protein measures albumin and globulins in your blood. Abnormal levels can reflect liver disease, kidney disease, or immune system problems.',
+    'ggt': 'GGT is a liver enzyme that rises when the liver is stressed, especially by alcohol or medications. It is a sensitive marker for bile duct problems.',
+    // Kidney
+    'egfr': 'eGFR estimates how well your kidneys filter waste from your blood. A low number means your kidneys are not working as well as they should.',
+    'creatinine': 'Creatinine is a waste product from muscle activity that your kidneys filter out. High levels suggest your kidneys may not be filtering properly.',
+    'bun': 'Blood Urea Nitrogen measures waste product from protein digestion. High levels can indicate kidney problems, dehydration, or a high-protein diet.',
+    'uric acid': 'Uric acid forms when the body breaks down purines from food. High levels can cause gout (painful joint inflammation) and may harm the kidneys.',
+    // Thyroid
+    'tsh': 'TSH is the hormone that tells your thyroid to work. A high level usually means your thyroid is underactive, while a low level may mean it is overactive.',
+    'free t4': 'Free T4 is the active thyroid hormone that controls your metabolism, energy, and body temperature. Abnormal levels affect how fast or slow your body runs.',
+    'free t3': 'Free T3 is the most active thyroid hormone. Low levels can cause fatigue and weight gain, while high levels may cause anxiety and rapid heart rate.',
+    // Inflammation
+    'crp': 'C-Reactive Protein rises when there is inflammation anywhere in the body. Elevated levels are also linked to higher cardiovascular risk.',
+    'hs-crp': 'High-sensitivity CRP detects low-grade inflammation linked to heart disease risk, even when you feel healthy.',
+    'esr': 'Erythrocyte Sedimentation Rate measures how fast red blood cells settle in a tube. A high rate suggests inflammation somewhere in the body.',
+    'ferritin': 'Ferritin reflects your body\'s iron stores. Low levels mean low iron (often causing fatigue), while very high levels can indicate inflammation or iron overload.',
+    'iron': 'Iron is essential for making hemoglobin and carrying oxygen. Low iron causes anemia and fatigue; too much iron can damage organs.',
+    // Vitamins
+    'vitamin d': 'Vitamin D helps your body absorb calcium and supports immune function. Low levels are very common and linked to bone weakness, fatigue, and mood changes.',
+    'vitamin b12': 'Vitamin B12 is vital for nerve function and making red blood cells. Deficiency can cause fatigue, numbness, and memory problems.',
+    'folate': 'Folate (vitamin B9) is needed for cell growth and DNA repair. Low levels can cause anemia and are especially important during pregnancy.',
+    // Metabolic
+    'glucose': 'Blood glucose is your blood sugar level. Consistently high readings can indicate prediabetes or diabetes, which affects your heart, kidneys, and nerves over time.',
+    'hemoglobin a1c': 'HbA1c shows your average blood sugar over the past 2 to 3 months. It is the gold standard for monitoring diabetes control.',
+    'hba1c': 'HbA1c shows your average blood sugar over the past 2 to 3 months. It is the gold standard for monitoring diabetes control.',
+    'insulin': 'Insulin is the hormone that moves sugar from your blood into cells. High fasting insulin can be an early warning sign of insulin resistance and future diabetes.',
+    // Hormones
+    'testosterone': 'Testosterone affects muscle mass, bone density, energy, and mood in both men and women. Low levels can cause fatigue, low libido, and loss of muscle.',
+    'estradiol': 'Estradiol is the primary form of estrogen. It plays a key role in reproductive health, bone density, and cardiovascular protection.',
+    'cortisol': 'Cortisol is your main stress hormone. Chronically high levels can disrupt sleep, weaken immunity, and increase belly fat.',
+    'dhea-s': 'DHEA-S is a precursor hormone that your body converts into testosterone and estrogen. It tends to decline with age and low levels may affect energy and mood.',
+    'progesterone': 'Progesterone supports pregnancy and regulates the menstrual cycle. Imbalances can cause irregular periods, mood changes, and sleep problems.',
+    // Electrolytes
+    'sodium': 'Sodium helps regulate fluid balance and nerve signals. Abnormal levels can cause confusion, muscle cramps, or in severe cases, seizures.',
+    'potassium': 'Potassium is critical for heart rhythm and muscle function. Both very high and very low levels can be dangerous for your heart.',
+    'calcium': 'Calcium is essential for bones, muscles, and nerves. Abnormal blood calcium can indicate parathyroid, kidney, or bone problems.',
+    'magnesium': 'Magnesium supports over 300 enzyme reactions including muscle, nerve, and heart function. Low levels are common and can cause cramps, fatigue, and irregular heartbeat.',
+  };
+
+  // Try exact match first, then partial match
+  if (descriptions[n]) return descriptions[n];
+  for (const [key, desc] of Object.entries(descriptions)) {
+    if (n.includes(key) || key.includes(n)) return desc;
+  }
+  return null;
+}
+
 function LabExplorer() {
   const { metrics } = useHealthStore();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -202,6 +279,24 @@ function LabExplorer() {
               Reference range: {metric.refLow ?? '—'} – {metric.refHigh ?? '—'} {metric.unit}
             </p>
           )}
+
+          {(() => {
+            const desc = getMetricDescription(metric.name);
+            return desc ? (
+              <div style={{
+                background: 'var(--color-surface-offset)',
+                borderRadius: 'var(--radius-md)',
+                padding: '0.75rem 1rem',
+                marginBottom: '1rem',
+                fontSize: 'var(--text-sm)',
+                lineHeight: 1.65,
+                color: 'var(--color-tx-muted)',
+                borderLeft: '3px solid var(--color-primary)',
+              }}>
+                {desc}
+              </div>
+            ) : null;
+          })()}
 
           {chartData.length >= 2 ? (
             <div style={{ marginTop: '0.5rem' }}>
@@ -331,8 +426,10 @@ export default function ReportsPage() {
   const [detailReport, setDetailReport] = useState<HealthReport | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
-  const [collapsedYears, setCollapsedYears] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<ReportsTab>('documents');
+  // All years collapsed by default except the current year
+  const currentYear = new Date().getFullYear().toString();
+  const [collapsedYears, setCollapsedYears] = useState<Set<string> | null>(null);
+  const [activeTab, setActiveTab] = useState<ReportsTab>('labs');
 
   const filtered = filterType === 'all' ? reports : reports.filter(r => r.report_type === filterType);
 
@@ -353,13 +450,20 @@ export default function ReportsPage() {
     return sorted;
   }, [filtered]);
 
+  // Initialize collapsed state once we have data
+  const effectiveCollapsed = useMemo(() => {
+    if (collapsedYears !== null) return collapsedYears;
+    // Default: collapse everything except current year
+    const allYears = groupedByYear.map(([y]) => y);
+    return new Set(allYears.filter(y => y !== currentYear));
+  }, [collapsedYears, groupedByYear, currentYear]);
+
   const toggleYear = (year: string) => {
-    setCollapsedYears(prev => {
-      const next = new Set(prev);
-      if (next.has(year)) next.delete(year);
-      else next.add(year);
-      return next;
-    });
+    const base = effectiveCollapsed;
+    const next = new Set(base);
+    if (next.has(year)) next.delete(year);
+    else next.add(year);
+    setCollapsedYears(next);
   };
 
   const getTypeIcon = (type: string) => {
@@ -438,7 +542,7 @@ export default function ReportsPage() {
       ) : (
         <div className="report-year-groups">
           {groupedByYear.map(([year, yearReports]) => {
-            const isCollapsed = collapsedYears.has(year);
+            const isCollapsed = effectiveCollapsed.has(year);
             return (
               <div key={year} className="report-year-group">
                 <button className="report-year-header" onClick={() => toggleYear(year)}>
