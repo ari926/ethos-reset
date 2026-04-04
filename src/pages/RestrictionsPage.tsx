@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useHealthStore, type Restriction, type HealthMetric } from '../stores/healthStore';
 import { ShieldAlert, Plus, Trash2, Edit2, Utensils, Dna, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { formatDate } from '../lib/utils';
 import RestrictionModal from '../components/Restrictions/RestrictionModal';
 import ConfirmDialog from '../components/common/ConfirmDialog';
+import Modal from '../components/common/Modal';
 
 const QUICK_ADD_PRESETS = [
   'Peanuts', 'Tree Nuts', 'Shellfish', 'Dairy', 'Gluten', 'Eggs', 'Soy',
@@ -19,16 +21,117 @@ interface FoodSensitivity {
   unit: string | null;
   level: 'High' | 'Moderate' | 'Low' | 'None';
   date: string;
+  testType: string;
 }
 
-function classifyFoodReaction(value: number, _unit: string | null): 'High' | 'Moderate' | 'Low' | 'None' {
-  // P88 Dietary Antigen Test - IgG values in U/mL
-  // Typical reference ranges: <10 Normal, 10-15 Low, 15-25 Moderate, >25 High
+// Known food names from P88 / Food Zoomer tests
+const KNOWN_FOODS = new Set([
+  'casein','cow\'s milk','goat\'s milk','egg yolk','egg white','egg albumin','beef','chicken','pork','lamb','turkey',
+  'codfish','salmon','tuna','shrimp','crab','lobster','clam','oyster','scallop',
+  'wheat','gluten','corn','rice','oat','barley','rye','buckwheat','millet','sorghum',
+  'soy','peanut','almond','cashew','walnut','pecan','pistachio','brazil nut','hazelnut','macadamia',
+  'broccoli','cauliflower','cabbage','spinach','lettuce','tomato','potato','carrot','celery','cucumber',
+  'onion','garlic','mushroom','asparagus','bell pepper','sweet potato','zucchini','peas','green bean','lima bean',
+  'apple','banana','blueberry','strawberry','grape','grapes','orange','lemon','pineapple','watermelon','plum','peach','cherry','mango','avocado','coconut',
+  'cacao','chocolate','coffee','black pepper','cinnamon','ginger','turmeric','oregano','basil','vanilla',
+  'sugar','honey','yeast','brewer\'s yeast','baker\'s yeast',
+  'aspergillus mix','candida','aspergillus',
+]);
+
+function isFoodMetric(name: string): boolean {
+  const lower = name.toLowerCase();
+  // Check if it matches known food patterns
+  if (KNOWN_FOODS.has(lower)) return true;
+  // Check P88/food-specific naming patterns
+  if (/igg4|ige\b|c3d\b|zoomer score|immune index/i.test(lower)) return true;
+  // Strip suffixes and check
+  const stripped = lower.replace(/\s*(igg4?|ige|c3d|zoomer score|score)\s*$/i, '').trim();
+  if (KNOWN_FOODS.has(stripped)) return true;
+  return false;
+}
+
+function classifyFoodReaction(value: number, name: string): 'High' | 'Moderate' | 'Low' | 'None' {
+  const lower = name.toLowerCase();
+  // Zoomer scores: >2.0 = High, 1.5-2.0 = Moderate, 1.0-1.5 = Low
+  if (/zoomer score|score$/i.test(lower)) {
+    if (value >= 3) return 'High';
+    if (value >= 2) return 'Moderate';
+    if (value >= 1) return 'Low';
+    return 'None';
+  }
+  // IgG4: >25 High, 10-25 Moderate, 5-10 Low
+  if (/igg4/i.test(lower)) {
+    if (value >= 25) return 'High';
+    if (value >= 10) return 'Moderate';
+    if (value >= 5) return 'Low';
+    return 'None';
+  }
+  // C3d: >5 High, 2-5 Moderate, 0.5-2 Low
+  if (/c3d/i.test(lower)) {
+    if (value >= 5) return 'High';
+    if (value >= 2) return 'Moderate';
+    if (value >= 0.5) return 'Low';
+    return 'None';
+  }
+  // IgE: >2 High, 1-2 Moderate, 0.5-1 Low
+  if (/ige\b/i.test(lower)) {
+    if (value >= 2) return 'High';
+    if (value >= 1) return 'Moderate';
+    if (value >= 0.5) return 'Low';
+    return 'None';
+  }
+  // Default (status-based from DB)
   if (value >= 25) return 'High';
   if (value >= 15) return 'Moderate';
   if (value >= 10) return 'Low';
   return 'None';
 }
+
+/* ── Plain English food explanations ── */
+const FOOD_EXPLANATIONS: Record<string, string> = {
+  'casein': 'Casein is the main protein in milk and cheese. When your body reacts to casein, it can cause bloating, brain fog, skin issues, and inflammation. This is different from lactose intolerance — your immune system is actually attacking the protein itself.',
+  'cow\'s milk': 'Your immune system is reacting to proteins in cow\'s milk. This can cause digestive issues, congestion, skin problems, and joint pain. Even small amounts in processed foods can trigger a response.',
+  'goat\'s milk': 'Goat\'s milk shares some proteins with cow\'s milk, so if you react to one, you may react to the other. Consider plant-based alternatives like oat or coconut milk.',
+  'egg yolk': 'Egg yolk reactions are often linked to inflammation. Yolks contain different proteins than whites, so you may tolerate one but not the other. This can cause gut irritation and skin issues.',
+  'egg white': 'Egg white contains proteins like ovalbumin that your immune system is flagging. This can cause digestive discomfort, skin reactions, and inflammation.',
+  'gluten': 'Gluten is a protein in wheat, barley, and rye. Your genetic test also shows HLA DQ2.5/DQ8X — meaning you have the celiac risk genes. Combined with this sensitivity result, avoiding gluten is strongly recommended.',
+  'wheat': 'Wheat contains gluten and other proteins your body is reacting to. This can cause bloating, fatigue, brain fog, and intestinal permeability (leaky gut). Your Zonulin levels confirm intestinal permeability.',
+  'corn': 'Corn sensitivity can cause inflammation and digestive issues. Corn is hidden in many processed foods as corn syrup, corn starch, and dextrose.',
+  'soy': 'Soy contains proteins that mimic hormones in your body. Given your elevated SHBG, reducing soy may help with hormone balance.',
+  'almond': 'Your immune system shows a moderate reaction to almonds. Consider rotating with other nuts like walnuts or macadamia, which you don\'t react to.',
+  'codfish': 'Your body shows dual reactivity (IgG + C3d) to codfish, meaning both your immune system and complement system are reacting. This is a stronger signal than a single marker.',
+  'black pepper': 'Black pepper reactions are uncommon but can contribute to gut inflammation. You may want to substitute with white pepper or other spices.',
+  'blueberry': 'A mild reaction to blueberries. These are usually fine in small amounts but may contribute to inflammation if eaten daily in large quantities.',
+  'broccoli': 'A mild reaction to broccoli. This cruciferous vegetable is generally very healthy, so consider rotating with other vegetables rather than eliminating entirely.',
+  'cauliflower': 'Similar to broccoli, a mild reaction. Rotate with other vegetables to reduce immune burden.',
+  'beef': 'A moderate reaction to beef proteins. Consider grass-fed sources which have different protein profiles, or rotate with chicken, fish, or plant proteins.',
+  'lima bean': 'Your IgE response to lima beans suggests a true allergic component. Avoid lima beans and watch for cross-reactions with other legumes.',
+  'aspergillus mix': 'Aspergillus is a common mold found in coffee, wine, dried fruits, and some grains. Your reaction means your immune system is fighting mold exposure — check your home for mold.',
+  'candida': 'Your immune system is reacting to Candida yeast. Combined with your GI-MAP showing Candida overgrowth (5,370 — above the 5,000 limit), this confirms active yeast issues in your gut.',
+};
+
+/* ── Plain English gene explanations ── */
+const GENE_EXPLANATIONS: Record<string, string> = {
+  'comt': 'COMT (Catechol-O-Methyltransferase) breaks down dopamine, adrenaline, and estrogen in your brain. Your AA variant means this enzyme works SLOWLY — so dopamine and stress hormones stay active longer. This makes you more focused and driven, but also more prone to anxiety, sleep issues, and feeling overwhelmed. Avoid supplements with catechols (like green tea extract, quercetin). Magnesium and SAMe can help.',
+  'cyp1a2': 'CYP1A2 is the enzyme that processes caffeine in your liver. Your CC variant means you are an ULTRA-SLOW caffeine metabolizer. One cup of coffee stays in your system much longer than most people. Caffeine after noon can wreck your sleep. Limit to 1 cup before 10am, or switch to decaf.',
+  'nat2': 'NAT2 processes certain drugs and toxins through your liver. Being a "Slow Acetylator" means medications like certain antibiotics, sulfa drugs, and some pain relievers take longer to clear from your body. Tell your doctors about this — they may need to adjust doses.',
+  'cyp2c9': 'CYP2C9 processes common medications including ibuprofen (Advil), naproxen (Aleve), and warfarin (blood thinner). Your variants mean these drugs may be stronger or last longer in your body. Use lower doses of NSAIDs and always inform your doctor.',
+  'mthfr': 'MTHFR converts folic acid into its active form (methylfolate) that your body actually uses. Your A1298C heterozygous variant means this process is slightly impaired (~30% reduced). Take methylfolate (not folic acid) and methylcobalamin (active B12). Your Thorne Advanced Nutrients already contains these.',
+  'hla': 'HLA DQ2.5/DQ8X means you carry the genetic markers for celiac disease. Combined with your positive wheat/gluten sensitivity tests, this is a strong signal to avoid gluten strictly. Not everyone with these genes develops celiac, but your food tests confirm your body IS reacting.',
+  'apoe': 'APOE E3/E3 is the most common and "normal" variant. This means you do NOT have the APOE4 variant linked to increased Alzheimer\'s risk. Your brain health genetics are favorable.',
+  'fto': 'FTO is the "obesity gene." Your TT variant is the normal/favorable version — you don\'t have the genetic tendency toward weight gain that some people carry.',
+  'fads1': 'FADS1 affects how your body converts plant omega-3s (like flaxseed) into the active forms (EPA/DHA) your brain and heart need. Your TT variant means this conversion is impaired. You MUST get omega-3s from fish oil or algae supplements directly — plant sources alone won\'t be enough.',
+  'histamine': 'Your genetic profile shows VERY HIGH histamine overload risk. This means your body produces more histamine than it can break down. Symptoms include headaches, flushing, itchy skin, racing heart, and anxiety. Avoid high-histamine foods: aged cheese, wine, fermented foods, cured meats, and leftovers. Consider DAO enzyme supplements before meals.',
+  'caffeine': 'Your CYP1A2 CC genotype makes you an ultra-slow caffeine metabolizer. One coffee can keep you wired for 8+ hours. Limit caffeine intake, especially after morning.',
+  'methylation': 'Your methylation pathway has HIGH genetic impact. Methylation is how your body repairs DNA, detoxifies, and processes B vitamins. Support it with methylated B vitamins (methylfolate + methylcobalamin), which your current supplement regimen includes.',
+  'glucose': 'Your genetics show HIGH impact on glucose and insulin pathways. This means you\'re more sensitive to blood sugar swings. Eat protein with every meal, avoid refined carbs, and consider intermittent fasting carefully (it can help or hurt depending on timing).',
+  'btd': 'BTD gene — you carry one copy of a pathogenic variant for biotinidase deficiency. As a CARRIER, you have no symptoms. But if your partner also carries a BTD variant, your children could be affected. Worth mentioning in family planning.',
+  'adipogenesis': 'Your genetics show HIGH impact on fat cell formation (adipogenesis). This means your body may create new fat cells more easily than average. Focus on preventing fat cell growth through consistent exercise and avoiding prolonged caloric surplus.',
+  'recovery': 'Your genetics show HIGH impact on recovery from exercise. You may need more rest days between intense workouts than average. Prioritize sleep, protein intake, and anti-inflammatory foods after training.',
+  'choline': 'Your genetics indicate HIGH need for choline — a nutrient critical for brain function, liver health, and methylation. Most people don\'t get enough. Eat eggs (if tolerated), liver, or take a choline supplement. Your PEMT gene variant increases your need.',
+  'fatty acids': 'Your genetics show VERY HIGH impact on fatty acid metabolism. Combined with your FADS1 variant, this means your body struggles to process certain fats. Take high-quality fish oil (EPA/DHA) directly.',
+  'collagen': 'Your COL12A1 variant affects collagen and joint health. You may be more prone to joint injuries and slower connective tissue repair. Consider collagen peptide supplements and joint-supporting exercises.',
+};
 
 const FOOD_LEVEL_CONFIG = {
   High: { color: 'var(--color-error)', bg: 'var(--color-error-bg, rgba(239,68,68,0.1))', icon: '🔴', badge: 'error' },
@@ -75,29 +178,42 @@ function FoodSensitivityTab({ memberId }: { memberId: string | null }) {
   const [foodData, setFoodData] = useState<FoodSensitivity[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedLevels, setExpandedLevels] = useState<Set<string>>(new Set(['High', 'Moderate', 'Low']));
+  const [selectedFood, setSelectedFood] = useState<FoodSensitivity | null>(null);
 
   useEffect(() => {
     if (!memberId) return;
     setLoading(true);
-    // Query metrics that look like P88 / food sensitivity data
-    // These typically have body_region = null or 'immune', source = 'report',
-    // and metric_name is a food name, with status like 'high', 'low', 'normal'
+    // Query P88 food sensitivity metrics and Food Zoomer scores
+    // Filter by metric names that are actual foods, not blood markers
     supabase
       .from('health_metrics')
       .select('*')
       .eq('member_id', memberId)
-      .or('source.ilike.%p88%,source.ilike.%antigen%,source.ilike.%food%,metric_unit.ilike.%U/mL%,body_region.eq.immune')
-      .order('metric_value', { ascending: false })
+      .order('recorded_date', { ascending: false })
       .then(({ data }) => {
         if (data && data.length > 0) {
-          const foods: FoodSensitivity[] = data.map((m: HealthMetric) => ({
-            food: m.metric_name,
-            value: Number(m.metric_value),
-            unit: m.metric_unit,
-            level: classifyFoodReaction(Number(m.metric_value), m.metric_unit),
-            date: m.recorded_date,
-          }));
-          setFoodData(foods);
+          const foods: FoodSensitivity[] = data
+            .filter((m: HealthMetric) => isFoodMetric(m.metric_name))
+            .map((m: HealthMetric) => {
+              const val = typeof m.metric_value === 'string' ? parseFloat(m.metric_value) || 0 : Number(m.metric_value) || 0;
+              return {
+                food: m.metric_name.replace(/\s*(IgG4?|IgE|C3d)\s*$/i, '').trim(),
+                value: val,
+                unit: m.metric_unit,
+                level: classifyFoodReaction(val, m.metric_name),
+                date: m.recorded_date,
+                testType: /igg4/i.test(m.metric_name) ? 'IgG4' : /ige\b/i.test(m.metric_name) ? 'IgE' : /c3d/i.test(m.metric_name) ? 'C3d' : /zoomer/i.test(m.metric_name) ? 'Zoomer' : 'IgG',
+              };
+            });
+          // Deduplicate: keep highest value per food name
+          const foodMap = new Map<string, FoodSensitivity>();
+          for (const f of foods) {
+            const existing = foodMap.get(f.food);
+            if (!existing || f.value > existing.value) {
+              foodMap.set(f.food, f);
+            }
+          }
+          setFoodData(Array.from(foodMap.values()));
         }
         setLoading(false);
       });
@@ -233,8 +349,9 @@ function FoodSensitivityTab({ memberId }: { memberId: string | null }) {
                 padding: '0.75rem 0.5rem',
               }}>
                 {foods.map(f => (
-                  <div
+                  <button
                     key={f.food}
+                    onClick={() => setSelectedFood(f)}
                     style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -244,19 +361,76 @@ function FoodSensitivityTab({ memberId }: { memberId: string | null }) {
                       borderRadius: 'var(--radius-sm)',
                       border: '1px solid var(--color-divider)',
                       fontSize: 'var(--text-sm)',
+                      cursor: 'pointer',
+                      width: '100%',
+                      textAlign: 'left',
+                      transition: 'border-color 200ms',
                     }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-divider)')}
                   >
                     <span style={{ fontWeight: 500 }}>{f.food}</span>
                     <span style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-xs)' }}>
-                      {f.value} {f.unit ?? 'U/mL'}
+                      {f.value} {f.unit ?? 'U/mL'} · {f.testType}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
           </div>
         );
       })}
+
+      {/* Food Detail Modal */}
+      {selectedFood && (
+        <Modal open={true} onClose={() => setSelectedFood(null)} title={`${selectedFood.food}`}>
+          <div style={{ padding: '0.5rem 0' }}>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+              <div className="kpi-card" style={{ flex: 1 }}>
+                <div className="kpi-label">Reactivity Level</div>
+                <div className="kpi-value" style={{ color: FOOD_LEVEL_CONFIG[selectedFood.level].color }}>{selectedFood.level}</div>
+              </div>
+              <div className="kpi-card" style={{ flex: 1 }}>
+                <div className="kpi-label">Value</div>
+                <div className="kpi-value">{selectedFood.value}</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)' }}>{selectedFood.unit ?? 'U/mL'} ({selectedFood.testType})</div>
+              </div>
+              <div className="kpi-card" style={{ flex: 1 }}>
+                <div className="kpi-label">Test Date</div>
+                <div className="kpi-value" style={{ fontSize: 'var(--text-md)' }}>{formatDate(selectedFood.date)}</div>
+              </div>
+            </div>
+
+            <div style={{
+              background: 'var(--color-surface-offset)', borderRadius: 'var(--radius-md)',
+              padding: '1rem 1.25rem', marginBottom: '1rem',
+            }}>
+              <h4 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                📖 What does this mean for you?
+              </h4>
+              <p style={{ fontSize: 'var(--text-sm)', lineHeight: 1.7, color: 'var(--color-tx-muted)' }}>
+                {FOOD_EXPLANATIONS[selectedFood.food.toLowerCase()] ??
+                  `Your immune system shows a ${selectedFood.level.toLowerCase()} reaction to ${selectedFood.food}. ` +
+                  (selectedFood.level === 'High' ? `This means your body is actively fighting this food — eating it regularly can cause inflammation, digestive issues, brain fog, and fatigue. Consider eliminating it for 3-6 months, then retest.` :
+                   selectedFood.level === 'Moderate' ? `This means your body has a noticeable immune response to this food. Try rotating it (eat no more than once every 4 days) to reduce the immune burden.` :
+                   selectedFood.level === 'Low' ? `This is a mild reaction. You can likely eat this food occasionally without issues, but avoid eating it daily.` :
+                   `No significant reaction detected. This food is likely safe for you.`)
+                }
+              </p>
+            </div>
+
+            {selectedFood.level === 'High' && (
+              <div style={{
+                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+                borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem',
+                fontSize: 'var(--text-sm)', color: 'var(--color-tx)',
+              }}>
+                ⚠️ <strong>Recommendation:</strong> Eliminate this food for at least 3-6 months, then retest to see if your immune response has calmed down.
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -266,6 +440,7 @@ function GeneticsTab({ memberId }: { memberId: string | null }) {
   const [geneData, setGeneData] = useState<GeneticInsight[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set(['medication', 'methylation', 'nutrient']));
+  const [selectedGene, setSelectedGene] = useState<GeneticInsight | null>(null);
 
   useEffect(() => {
     if (!memberId) return;
@@ -417,8 +592,9 @@ function GeneticsTab({ memberId }: { memberId: string | null }) {
             {isExpanded && (
               <div style={{ padding: '0.75rem 0.5rem' }}>
                 {items.map(g => (
-                  <div
+                  <button
                     key={g.gene + g.date}
+                    onClick={() => setSelectedGene(g)}
                     style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -426,7 +602,18 @@ function GeneticsTab({ memberId }: { memberId: string | null }) {
                       padding: '0.6rem 0.75rem',
                       borderBottom: '1px solid var(--color-divider)',
                       fontSize: 'var(--text-sm)',
+                      background: 'none',
+                      border: 'none',
+                      borderBottomStyle: 'solid',
+                      borderBottomWidth: '1px',
+                      borderBottomColor: 'var(--color-divider)',
+                      width: '100%',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 200ms',
                     }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-offset)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       {g.impact === 'critical' ? (
@@ -442,13 +629,70 @@ function GeneticsTab({ memberId }: { memberId: string | null }) {
                     <span className={`badge badge-${g.impact === 'normal' ? 'success' : g.impact === 'critical' ? 'error' : 'warning'}`}>
                       {g.impact}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
           </div>
         );
       })}
+
+      {/* Gene Detail Modal */}
+      {selectedGene && (
+        <Modal open={true} onClose={() => setSelectedGene(null)} title={selectedGene.gene}>
+          <div style={{ padding: '0.5rem 0' }}>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <div className="kpi-card" style={{ flex: 1, minWidth: '120px' }}>
+                <div className="kpi-label">Impact</div>
+                <div className="kpi-value" style={{ color: selectedGene.impact === 'high' || selectedGene.impact === 'critical' ? 'var(--color-warning)' : 'var(--color-success)' }}>
+                  {selectedGene.impact.charAt(0).toUpperCase() + selectedGene.impact.slice(1)}
+                </div>
+              </div>
+              {selectedGene.variant && (
+                <div className="kpi-card" style={{ flex: 1, minWidth: '120px' }}>
+                  <div className="kpi-label">Your Variant</div>
+                  <div className="kpi-value" style={{ fontSize: 'var(--text-md)' }}>{selectedGene.variant}</div>
+                </div>
+              )}
+              <div className="kpi-card" style={{ flex: 1, minWidth: '120px' }}>
+                <div className="kpi-label">Category</div>
+                <div className="kpi-value" style={{ fontSize: 'var(--text-md)' }}>
+                  {GENE_CATEGORIES[selectedGene.category]?.icon} {GENE_CATEGORIES[selectedGene.category]?.label ?? selectedGene.category}
+                </div>
+              </div>
+            </div>
+
+            <div style={{
+              background: 'var(--color-surface-offset)', borderRadius: 'var(--radius-md)',
+              padding: '1rem 1.25rem', marginBottom: '1rem',
+            }}>
+              <h4 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                📖 What does this mean for you?
+              </h4>
+              <p style={{ fontSize: 'var(--text-sm)', lineHeight: 1.7, color: 'var(--color-tx-muted)' }}>
+                {(() => {
+                  const key = selectedGene.gene.toLowerCase().replace(/\s.*$/, '');
+                  return GENE_EXPLANATIONS[key] ??
+                    `${selectedGene.gene} is a gene that affects your ${GENE_CATEGORIES[selectedGene.category]?.label.toLowerCase() ?? 'health'}. ` +
+                    (selectedGene.impact === 'high' || selectedGene.impact === 'critical'
+                      ? `Your variant has a notable impact — meaning your body handles this pathway differently than most people. Discuss with your doctor how this might affect your treatment plan.`
+                      : `Your variant has a normal or low impact — this gene is not a major concern for you.`);
+                })()}
+              </p>
+            </div>
+
+            {(selectedGene.impact === 'high' || selectedGene.impact === 'critical') && (
+              <div style={{
+                background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)',
+                borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem',
+                fontSize: 'var(--text-sm)', color: 'var(--color-tx)',
+              }}>
+                💡 <strong>Action item:</strong> Share this genetic result with your healthcare provider. It may affect medication choices, supplement needs, or lifestyle recommendations.
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
