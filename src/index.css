@@ -1301,3 +1301,83 @@ input, select, textarea { font-family: inherit; }
   .doctor-ai-tab-sub { display: none; }
   .doctor-ai-tab { padding: 0.65rem 0.5rem; font-size: var(--text-xs); }
 }
+
+/* ── Reports Tab Bar ── */
+.reports-tab-bar {
+  display: flex; gap: 0; margin-bottom: 1rem;
+  border-bottom: 1px solid var(--color-divider);
+}
+.reports-tab {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.7rem 1.25rem; font-size: var(--text-sm); font-weight: 500;
+  background: none; border: none; color: var(--color-tx-muted);
+  cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all 200ms ease;
+}
+.reports-tab:hover { color: var(--color-tx); }
+.reports-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); font-weight: 600; }
+.reports-tab-labs.active { color: #8b5cf6; border-bottom-color: #8b5cf6; }
+.reports-tab-count {
+  font-size: 11px; min-width: 20px; height: 20px; padding: 0 6px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-surface-offset); border-radius: var(--radius-full);
+  color: var(--color-tx-muted); font-weight: 600;
+}
+
+/* ── Lab Explorer ── */
+.lab-explorer { padding: 0.5rem 0; }
+.lab-categories-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0.75rem; }
+.lab-category-card {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: var(--color-surface); border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg); cursor: pointer;
+  transition: all 200ms ease; width: 100%; text-align: left;
+}
+.lab-category-card:hover { border-color: var(--color-primary); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.lab-category-icon { font-size: 1.75rem; flex-shrink: 0; }
+.lab-category-info { flex: 1; min-width: 0; }
+.lab-category-info h3 { margin: 0; font-size: var(--text-sm); font-weight: 600; }
+.lab-category-info p { margin: 0.15rem 0 0; font-size: var(--text-xs); color: var(--color-tx-muted); line-height: 1.4; }
+.lab-category-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; flex-shrink: 0; }
+.lab-category-count { font-size: var(--text-xs); color: var(--color-tx-muted); white-space: nowrap; }
+
+/* ── Lab Markers List ── */
+.lab-markers-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.lab-marker-card {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.75rem 1rem; width: 100%; text-align: left;
+  background: var(--color-surface); border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md); cursor: pointer;
+  transition: all 150ms ease;
+}
+.lab-marker-card:hover { border-color: var(--color-primary); background: var(--color-surface-offset); }
+.lab-marker-info { flex: 1; min-width: 0; }
+.lab-marker-name { display: block; font-size: var(--text-sm); font-weight: 600; }
+.lab-marker-date { display: block; font-size: var(--text-xs); color: var(--color-tx-faint); margin-top: 0.1rem; }
+.lab-marker-value-section { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.lab-marker-value { font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
+.lab-marker-unit { font-weight: 400; color: var(--color-tx-muted); font-size: var(--text-xs); }
+.lab-marker-trend { display: flex; align-items: center; }
+.lab-marker-trend-up { color: var(--color-error); }
+.lab-marker-trend-down { color: var(--color-success); }
+.lab-marker-trend-stable { color: var(--color-tx-faint); }
+
+/* ── Lab Metric Detail ── */
+.lab-metric-detail { background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1.25rem; }
+.lab-metric-detail-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; }
+
+/* ── Lab History Table ── */
+.lab-history-table { border: 1px solid var(--color-divider); border-radius: var(--radius-md); overflow: hidden; }
+.lab-history-row {
+  display: grid; grid-template-columns: 1fr 1fr auto;
+  padding: 0.5rem 0.75rem; font-size: var(--text-sm);
+  border-bottom: 1px solid var(--color-divider);
+}
+.lab-history-row:last-child { border-bottom: none; }
+.lab-history-header { font-weight: 600; font-size: var(--text-xs); color: var(--color-tx-muted); text-transform: uppercase; letter-spacing: 0.04em; background: var(--color-surface-offset); }
+
+@media (max-width: 640px) {
+  .lab-categories-grid { grid-template-columns: 1fr; }
+  .lab-metric-detail-header { flex-direction: column; align-items: flex-start; }
+}

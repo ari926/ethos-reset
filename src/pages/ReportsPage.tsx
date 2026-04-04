@@ -1,9 +1,10 @@
 import { useState, useRef, useMemo } from 'react';
 import { useHealthStore, type HealthReport } from '../stores/healthStore';
-import { FileText, Upload, Trash2, Eye, X, Calendar, ChevronDown, ChevronRight } from 'lucide-react';
+import { FileText, Upload, Trash2, Eye, X, Calendar, ChevronDown, ChevronRight, Beaker, ArrowLeft, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import Modal from '../components/common/Modal';
 import ConfirmDialog from '../components/common/ConfirmDialog';
+import TrendChart from '../components/Dashboard/TrendChart';
 
 const REPORT_TYPES = [
   { value: 'lab_results', label: 'Lab Results' },
@@ -88,6 +89,241 @@ function getReportYear(report: HealthReport): string {
   return 'Unknown';
 }
 
+/* ── Lab Explorer Categories ── */
+const LAB_CATEGORIES: Array<{ key: string; label: string; icon: string; regions: string[]; description: string }> = [
+  { key: 'blood', label: 'Blood Work', icon: '🩸', regions: ['blood'], description: 'CBC, hormones, vitamins, minerals, immune markers' },
+  { key: 'heart', label: 'Cardiovascular', icon: '❤️', regions: ['heart'], description: 'Cholesterol, triglycerides, ApoB, lipid panel' },
+  { key: 'liver', label: 'Liver Function', icon: '🫁', regions: ['liver'], description: 'AST, ALT, bilirubin, albumin, GGT' },
+  { key: 'kidneys', label: 'Kidney Function', icon: '💧', regions: ['kidneys'], description: 'eGFR, creatinine, BUN, uric acid' },
+  { key: 'gut', label: 'Gut & Stool', icon: '🧫', regions: ['abdomen', 'stomach'], description: 'GI-MAP, H. pylori, Candida, stool markers' },
+  { key: 'neuro', label: 'Neurological', icon: '🧠', regions: ['head'], description: 'TSH, prolactin, neurofilament, NMO' },
+];
+
+function LabExplorer() {
+  const { metrics } = useHealthStore();
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+
+  // Group metrics by category
+  const categoryData = useMemo(() => {
+    const data: Record<string, Array<{
+      name: string;
+      latestValue: string;
+      unit: string | null;
+      status: string | null;
+      date: string;
+      refLow: number | null;
+      refHigh: number | null;
+      history: Array<{ date: string; value: number; status: string | null }>;
+      trend: 'up' | 'down' | 'stable' | null;
+    }>> = {};
+
+    for (const cat of LAB_CATEGORIES) {
+      const catMetrics = metrics.filter(m => cat.regions.includes(m.body_region ?? ''));
+
+      // Group by metric name
+      const byName = new Map<string, typeof metrics>();
+      for (const m of catMetrics) {
+        const arr = byName.get(m.metric_name) ?? [];
+        arr.push(m);
+        byName.set(m.metric_name, arr);
+      }
+
+      data[cat.key] = Array.from(byName.entries()).map(([name, items]) => {
+        // Sort by date descending
+        const sorted = [...items].sort((a, b) => (b.recorded_date ?? '').localeCompare(a.recorded_date ?? ''));
+        const latest = sorted[0];
+        const prev = sorted[1];
+        let trend: 'up' | 'down' | 'stable' | null = null;
+        if (prev) {
+          const latVal = Number(latest.metric_value);
+          const prevVal = Number(prev.metric_value);
+          if (!isNaN(latVal) && !isNaN(prevVal)) {
+            const pctChange = ((latVal - prevVal) / Math.abs(prevVal || 1)) * 100;
+            trend = pctChange > 3 ? 'up' : pctChange < -3 ? 'down' : 'stable';
+          }
+        }
+
+        return {
+          name,
+          latestValue: String(latest.metric_value),
+          unit: latest.metric_unit,
+          status: latest.status,
+          date: latest.recorded_date,
+          refLow: latest.ref_range_low,
+          refHigh: latest.ref_range_high,
+          trend,
+          history: sorted.map(m => ({
+            date: m.recorded_date,
+            value: Number(m.metric_value),
+            status: m.status,
+          })).reverse(), // chronological for chart
+        };
+      }).sort((a, b) => {
+        // Flagged first, then alphabetical
+        const statusOrder: Record<string, number> = { critical: 0, high: 1, low: 2, normal: 3 };
+        return (statusOrder[a.status ?? 'normal'] ?? 3) - (statusOrder[b.status ?? 'normal'] ?? 3);
+      });
+    }
+    return data;
+  }, [metrics]);
+
+  // Metric detail view with chart
+  if (selectedMetric && selectedCategory) {
+    const cat = categoryData[selectedCategory] ?? [];
+    const metric = cat.find(m => m.name === selectedMetric);
+    if (!metric) return null;
+
+    const chartData = metric.history
+      .filter(h => !isNaN(h.value))
+      .map(h => ({ date: h.date, value: h.value }));
+
+    return (
+      <div className="lab-explorer">
+        <button className="btn btn-ghost btn-sm" onClick={() => setSelectedMetric(null)} style={{ marginBottom: '1rem' }}>
+          <ArrowLeft size={14} /> Back to {LAB_CATEGORIES.find(c => c.key === selectedCategory)?.label}
+        </button>
+
+        <div className="lab-metric-detail">
+          <div className="lab-metric-detail-header">
+            <h2 style={{ margin: 0 }}>{metric.name}</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>
+                {metric.latestValue} <span style={{ fontSize: 'var(--text-sm)', fontWeight: 400, color: 'var(--color-tx-muted)' }}>{metric.unit}</span>
+              </span>
+              <span className={`badge badge-${metric.status === 'normal' ? 'success' : metric.status === 'critical' ? 'error' : 'warning'}`}>
+                {metric.status}
+              </span>
+            </div>
+          </div>
+
+          {(metric.refLow != null || metric.refHigh != null) && (
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)', margin: '0.25rem 0 1rem' }}>
+              Reference range: {metric.refLow ?? '—'} – {metric.refHigh ?? '—'} {metric.unit}
+            </p>
+          )}
+
+          {chartData.length >= 2 ? (
+            <div style={{ marginTop: '0.5rem' }}>
+              <TrendChart
+                data={chartData}
+                metricName={metric.name}
+                unit={metric.unit ?? ''}
+                refRangeLow={metric.refLow ?? undefined}
+                refRangeHigh={metric.refHigh ?? undefined}
+              />
+            </div>
+          ) : (
+            <p style={{ color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)', padding: '2rem 0', textAlign: 'center' }}>
+              Only 1 data point — need more readings for a trend chart.
+            </p>
+          )}
+
+          <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginTop: '1.5rem', marginBottom: '0.5rem' }}>History</h3>
+          <div className="lab-history-table">
+            <div className="lab-history-row lab-history-header">
+              <span>Date</span>
+              <span>Value</span>
+              <span>Status</span>
+            </div>
+            {metric.history.slice().reverse().map((h, i) => (
+              <div key={i} className="lab-history-row">
+                <span>{formatDate(h.date)}</span>
+                <span style={{ fontWeight: 600 }}>{h.value} {metric.unit}</span>
+                <span className={`badge badge-${h.status === 'normal' ? 'success' : h.status === 'critical' ? 'error' : 'warning'}`}>
+                  {h.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Category detail view — show all markers
+  if (selectedCategory) {
+    const cat = LAB_CATEGORIES.find(c => c.key === selectedCategory);
+    const markers = categoryData[selectedCategory] ?? [];
+
+    return (
+      <div className="lab-explorer">
+        <button className="btn btn-ghost btn-sm" onClick={() => setSelectedCategory(null)} style={{ marginBottom: '1rem' }}>
+          <ArrowLeft size={14} /> Back to categories
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+          <span style={{ fontSize: '1.5rem' }}>{cat?.icon}</span>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>{cat?.label}</h2>
+            <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)' }}>{markers.length} markers tracked</p>
+          </div>
+        </div>
+
+        {markers.length === 0 ? (
+          <div className="empty-state" style={{ padding: '3rem 1rem' }}>
+            <Beaker size={40} />
+            <p>No lab data in this category yet. Upload reports to populate.</p>
+          </div>
+        ) : (
+          <div className="lab-markers-list">
+            {markers.map(m => (
+              <button key={m.name} className="lab-marker-card" onClick={() => setSelectedMetric(m.name)}>
+                <div className="lab-marker-info">
+                  <span className="lab-marker-name">{m.name}</span>
+                  <span className="lab-marker-date">{formatDate(m.date)}</span>
+                </div>
+                <div className="lab-marker-value-section">
+                  <span className="lab-marker-value">
+                    {m.latestValue} <span className="lab-marker-unit">{m.unit}</span>
+                  </span>
+                  {m.trend && (
+                    <span className={`lab-marker-trend lab-marker-trend-${m.trend}`}>
+                      {m.trend === 'up' ? <TrendingUp size={14} /> : m.trend === 'down' ? <TrendingDown size={14} /> : <Minus size={14} />}
+                    </span>
+                  )}
+                  <span className={`badge badge-${m.status === 'normal' ? 'success' : m.status === 'critical' ? 'error' : 'warning'}`}>
+                    {m.status}
+                  </span>
+                </div>
+                <ChevronRight size={14} style={{ color: 'var(--color-tx-faint)', flexShrink: 0 }} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Category grid
+  return (
+    <div className="lab-explorer">
+      <div className="lab-categories-grid">
+        {LAB_CATEGORIES.map(cat => {
+          const markers = categoryData[cat.key] ?? [];
+          const flagged = markers.filter(m => m.status === 'high' || m.status === 'critical' || m.status === 'low').length;
+          return (
+            <button key={cat.key} className="lab-category-card" onClick={() => setSelectedCategory(cat.key)}>
+              <div className="lab-category-icon">{cat.icon}</div>
+              <div className="lab-category-info">
+                <h3>{cat.label}</h3>
+                <p>{cat.description}</p>
+              </div>
+              <div className="lab-category-stats">
+                <span className="lab-category-count">{markers.length} markers</span>
+                {flagged > 0 && <span className="badge badge-error">{flagged} flagged</span>}
+              </div>
+              <ChevronRight size={16} style={{ color: 'var(--color-tx-faint)' }} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+type ReportsTab = 'documents' | 'labs';
+
 export default function ReportsPage() {
   const { reports, activeMemberId, familyMembers, uploadReport, deleteReport } = useHealthStore();
   const member = familyMembers.find(m => m.id === activeMemberId);
@@ -96,6 +332,7 @@ export default function ReportsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [collapsedYears, setCollapsedYears] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<ReportsTab>('documents');
 
   const filtered = filterType === 'all' ? reports : reports.filter(r => r.report_type === filterType);
 
@@ -148,11 +385,36 @@ export default function ReportsPage() {
             {member ? `${member.first_name}'s medical documents & reports` : 'Select a family member'}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setUploadOpen(true)} disabled={!activeMemberId}>
-          <Upload size={14} /> Upload Reports
+        {activeTab === 'documents' && (
+          <button className="btn btn-primary" onClick={() => setUploadOpen(true)} disabled={!activeMemberId}>
+            <Upload size={14} /> Upload Reports
+          </button>
+        )}
+      </div>
+
+      {/* Tab Bar */}
+      <div className="reports-tab-bar">
+        <button
+          className={`reports-tab${activeTab === 'documents' ? ' active' : ''}`}
+          onClick={() => setActiveTab('documents')}
+        >
+          <FileText size={15} />
+          <span>Documents</span>
+          <span className="reports-tab-count">{reports.length}</span>
+        </button>
+        <button
+          className={`reports-tab reports-tab-labs${activeTab === 'labs' ? ' active' : ''}`}
+          onClick={() => setActiveTab('labs')}
+        >
+          <Beaker size={15} />
+          <span>Lab Explorer</span>
         </button>
       </div>
 
+      {activeTab === 'labs' ? (
+        <LabExplorer />
+      ) : (
+      <>
       {reports.length > 0 && (
         <div className="filter-bar">
           <select className="select-field" style={{ width: 'auto' }} value={filterType} onChange={e => setFilterType(e.target.value)}>
@@ -221,6 +483,9 @@ export default function ReportsPage() {
             );
           })}
         </div>
+      )}
+
+      </>
       )}
 
       <UploadModal
