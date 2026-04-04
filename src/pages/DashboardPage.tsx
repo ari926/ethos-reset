@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useHealthStore } from '../stores/healthStore';
-import { Heart, FileText, ShieldAlert, Activity, Clock, Plus, TrendingUp, AlertTriangle, CheckCircle, ArrowUpRight } from 'lucide-react';
+import { Heart, FileText, ShieldAlert, Activity, Clock, Plus, TrendingUp, AlertTriangle, CheckCircle, ArrowUpRight, BarChart3 } from 'lucide-react';
 import { formatDate, calculateAge } from '../lib/utils';
 import Modal from '../components/common/Modal';
+import TrendChart from '../components/Dashboard/TrendChart';
+import AlertsBanner from '../components/Dashboard/AlertsBanner';
 
 const VITAL_TYPES = [
   { value: 'blood_pressure', label: 'Blood Pressure', unit: 'mmHg', hasSecondary: true, secondaryLabel: 'Diastolic' },
@@ -199,6 +201,8 @@ export default function DashboardPage() {
 
   return (
     <div>
+      <AlertsBanner />
+
       <div className="view-header">
         <div>
           <h1 className="view-title">Dashboard</h1>
@@ -274,6 +278,9 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ── Metric Trends ── */}
+      <MetricTrendsSection metrics={metrics} />
+
       {latestVitals.size > 0 && (
         <div className="section">
           <h2 className="section-title"><TrendingUp size={16} style={{ display: 'inline', verticalAlign: '-2px', marginRight: '0.4rem' }} />Latest Vitals</h2>
@@ -322,6 +329,98 @@ export default function DashboardPage() {
         memberId={activeMemberId}
         onSave={addVital}
       />
+    </div>
+  );
+}
+
+function MetricTrendsSection({ metrics }: { metrics: Array<{ metric_name: string; metric_value: number | string; metric_unit: string | null; recorded_date: string; ref_range_low: number | null; ref_range_high: number | null }> }) {
+  // Build a map of metric name -> data points, only include metrics with 2+ points
+  const metricOptions = useMemo(() => {
+    const grouped = new Map<string, { dates: Set<string>; unit: string; refLow: number | null; refHigh: number | null }>();
+    for (const m of metrics) {
+      const existing = grouped.get(m.metric_name);
+      if (!existing) {
+        grouped.set(m.metric_name, { dates: new Set([m.recorded_date]), unit: m.metric_unit ?? '', refLow: m.ref_range_low, refHigh: m.ref_range_high });
+      } else {
+        existing.dates.add(m.recorded_date);
+        if (m.ref_range_low != null) existing.refLow = m.ref_range_low;
+        if (m.ref_range_high != null) existing.refHigh = m.ref_range_high;
+      }
+    }
+    // Only metrics with multiple distinct data points
+    const multi = Array.from(grouped.entries())
+      .filter(([, v]) => v.dates.size >= 2)
+      .map(([name]) => name)
+      .sort();
+    // Then all others
+    const single = Array.from(grouped.keys()).filter(n => !multi.includes(n)).sort();
+    return { multi, all: [...multi, ...single] };
+  }, [metrics]);
+
+  const defaultMetric = metricOptions.multi.includes('LDL Cholesterol')
+    ? 'LDL Cholesterol'
+    : metricOptions.multi[0] ?? metricOptions.all[0] ?? null;
+
+  const [selected, setSelected] = useState<string | null>(defaultMetric);
+
+  const chartData = useMemo(() => {
+    if (!selected) return { points: [], unit: '', refLow: undefined as number | undefined, refHigh: undefined as number | undefined };
+    const points = metrics
+      .filter(m => m.metric_name === selected)
+      .map(m => ({ date: m.recorded_date, value: Number(m.metric_value) }));
+    const sample = metrics.find(m => m.metric_name === selected);
+    return {
+      points,
+      unit: sample?.metric_unit ?? '',
+      refLow: sample?.ref_range_low ?? undefined,
+      refHigh: sample?.ref_range_high ?? undefined,
+    };
+  }, [selected, metrics]);
+
+  if (metricOptions.all.length === 0) return null;
+
+  return (
+    <div className="section" style={{ marginTop: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+        <h2 className="section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <BarChart3 size={16} style={{ color: 'var(--color-primary)' }} />
+          Metric Trends
+        </h2>
+        <select
+          className="select-field"
+          style={{ maxWidth: 260, fontSize: 'var(--text-xs)' }}
+          value={selected ?? ''}
+          onChange={e => setSelected(e.target.value || null)}
+        >
+          {metricOptions.multi.length > 0 && (
+            <optgroup label="Multiple readings">
+              {metricOptions.multi.map(n => <option key={n} value={n}>{n}</option>)}
+            </optgroup>
+          )}
+          {metricOptions.all.filter(n => !metricOptions.multi.includes(n)).length > 0 && (
+            <optgroup label="Single reading">
+              {metricOptions.all.filter(n => !metricOptions.multi.includes(n)).map(n => <option key={n} value={n}>{n}</option>)}
+            </optgroup>
+          )}
+        </select>
+      </div>
+      {selected && (
+        <div style={{
+          background: 'var(--color-surface)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--color-border)',
+          padding: '1rem',
+          overflow: 'hidden',
+        }}>
+          <TrendChart
+            data={chartData.points}
+            metricName={selected}
+            unit={chartData.unit}
+            refRangeLow={chartData.refLow}
+            refRangeHigh={chartData.refHigh}
+          />
+        </div>
+      )}
     </div>
   );
 }

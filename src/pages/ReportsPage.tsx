@@ -440,7 +440,7 @@ function ReportDetailModal({ report, onClose, onDelete }: {
           {report.file_url.endsWith('.pdf') || report.file_mime_type === 'application/pdf' ? (
             <iframe
               src={report.file_url}
-              style={{ width: '100%', height: '500px', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)' }}
+              style={{ width: '100%', height: '70vh', border: 'none', borderRadius: 'var(--radius-md)' }}
               title={report.title}
             />
           ) : report.file_url.match(/\.(jpg|jpeg|png|webp)$/i) ? (
