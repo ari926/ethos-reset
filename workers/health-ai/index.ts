@@ -247,7 +247,18 @@ async function processReport(env: Env, fileUrl: string, reportType: string, titl
 
   const contentType = fileRes.headers.get('content-type') ?? 'application/pdf';
   const arrayBuffer = await fileRes.arrayBuffer();
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+  // Convert to base64 using a method that handles large files
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const end = Math.min(i + chunkSize, bytes.length);
+    for (let j = i; j < end; j++) {
+      binary += String.fromCharCode(bytes[j]);
+    }
+  }
+  const base64 = btoa(binary);
 
   let responseText: string;
 
