@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './stores/authStore';
 import { useHealthStore } from './stores/healthStore';
 import AppShell from './components/Layout/AppShell';
+import LoginPage from './components/Auth/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import BodyPage from './pages/BodyPage';
 import ReportsPage from './pages/ReportsPage';
@@ -14,8 +15,23 @@ import ChatPage from './pages/ChatPage';
 import DoctorsPage from './pages/DoctorsPage';
 import FamilyPage from './pages/FamilyPage';
 
-// AUTH TEMPORARILY DISABLED
 function AuthGate({ children }: { children: React.ReactNode }) {
+  const session = useAuthStore(s => s.session);
+  const loading = useAuthStore(s => s.loading);
+  const initialized = useAuthStore(s => s.initialized);
+
+  if (!initialized || loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--color-tx-muted)' }}>
+        Loading...
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <LoginPage />;
+  }
+
   return <>{children}</>;
 }
 
