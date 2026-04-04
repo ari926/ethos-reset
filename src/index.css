@@ -553,6 +553,21 @@ input, select, textarea { font-family: inherit; }
 .report-card-summary { font-size: var(--text-sm); color: var(--color-tx-muted); margin-top: 0.75rem; line-height: 1.6; }
 .report-card-regions { margin-top: 0.5rem; display: flex; gap: 0.3rem; flex-wrap: wrap; }
 
+/* ─── REPORT YEAR GROUPS ─── */
+.report-year-groups { display: flex; flex-direction: column; gap: 1.5rem; }
+.report-year-group { }
+.report-year-header {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 0.6rem 0.75rem; margin-bottom: 0.6rem;
+  background: var(--color-surface); border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md); cursor: pointer;
+  font-weight: 600; font-size: var(--text-sm); color: var(--color-tx);
+  transition: all var(--transition);
+}
+.report-year-header:hover { border-color: var(--color-primary-glow); }
+.report-year-label { font-size: var(--text-base); font-weight: 700; }
+.report-year-count { font-size: var(--text-xs); color: var(--color-tx-muted); font-weight: 500; }
+
 /* ─── COMPACT LIST ─── */
 .list-compact { display: flex; flex-direction: column; gap: 4px; }
 .list-compact-item {

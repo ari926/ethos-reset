@@ -1,13 +1,18 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useHealthStore, type HealthReport } from '../stores/healthStore';
-import { FileText, Upload, Trash2, Eye, X } from 'lucide-react';
+import { FileText, Upload, Trash2, Eye, X, Calendar, ChevronDown, ChevronRight } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import Modal from '../components/common/Modal';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 
 const REPORT_TYPES = [
+  { value: 'lab_results', label: 'Lab Results' },
   { value: 'blood_test', label: 'Blood Test' },
   { value: 'imaging', label: 'Imaging' },
+  { value: 'stool_test', label: 'Stool Test' },
+  { value: 'specialty', label: 'Specialty' },
+  { value: 'genetic', label: 'Genetic' },
+  { value: 'doctor_notes', label: 'Doctor Notes' },
   { value: 'pathology', label: 'Pathology' },
   { value: 'general', label: 'General' },
   { value: 'prescription', label: 'Prescription' },
@@ -16,6 +21,13 @@ const REPORT_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
+function getReportYear(report: HealthReport): string {
+  if (report.report_date) {
+    return new Date(report.report_date).getFullYear().toString();
+  }
+  return 'Unknown';
+}
+
 export default function ReportsPage() {
   const { reports, activeMemberId, familyMembers, uploadReport, deleteReport } = useHealthStore();
   const member = familyMembers.find(m => m.id === activeMemberId);
@@ -23,8 +35,49 @@ export default function ReportsPage() {
   const [detailReport, setDetailReport] = useState<HealthReport | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
+  const [collapsedYears, setCollapsedYears] = useState<Set<string>>(new Set());
 
   const filtered = filterType === 'all' ? reports : reports.filter(r => r.report_type === filterType);
+
+  // Group by year, sorted descending
+  const groupedByYear = useMemo(() => {
+    const groups: Record<string, HealthReport[]> = {};
+    for (const r of filtered) {
+      const year = getReportYear(r);
+      if (!groups[year]) groups[year] = [];
+      groups[year].push(r);
+    }
+    // Sort years descending
+    const sorted = Object.entries(groups).sort((a, b) => {
+      if (a[0] === 'Unknown') return 1;
+      if (b[0] === 'Unknown') return -1;
+      return parseInt(b[0]) - parseInt(a[0]);
+    });
+    return sorted;
+  }, [filtered]);
+
+  const toggleYear = (year: string) => {
+    setCollapsedYears(prev => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'imaging': return '🩻';
+      case 'lab_results':
+      case 'blood_test':
+      case 'lab_panel': return '🩸';
+      case 'stool_test': return '🧫';
+      case 'genetic': return '🧬';
+      case 'specialty': return '🔬';
+      case 'doctor_notes': return '📋';
+      default: return '📄';
+    }
+  };
 
   return (
     <div>
@@ -32,19 +85,23 @@ export default function ReportsPage() {
         <div>
           <h1 className="view-title">Medical Reports</h1>
           <p className="view-subtitle">
-            {member ? `${member.first_name}'s uploaded reports and AI analysis` : 'Select a family member'}
+            {member ? `${member.first_name}'s medical documents & reports` : 'Select a family member'}
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => setUploadOpen(true)} disabled={!activeMemberId}>
-          <Upload size={14} /> Upload Report
+          <Upload size={14} /> Upload Reports
         </button>
       </div>
 
       {reports.length > 0 && (
         <div className="filter-bar">
           <select className="select-field" style={{ width: 'auto' }} value={filterType} onChange={e => setFilterType(e.target.value)}>
-            <option value="all">All Types</option>
-            {REPORT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            <option value="all">All Types ({reports.length})</option>
+            {REPORT_TYPES.map(t => {
+              const count = reports.filter(r => r.report_type === t.value).length;
+              if (count === 0) return null;
+              return <option key={t.value} value={t.value}>{t.label} ({count})</option>;
+            })}
           </select>
           <span className="filter-count">{filtered.length} report{filtered.length !== 1 ? 's' : ''}</span>
         </div>
@@ -54,36 +111,55 @@ export default function ReportsPage() {
         <div className="empty-state">
           <FileText size={48} />
           <h2>{reports.length === 0 ? 'No reports yet' : 'No matching reports'}</h2>
-          <p>Upload a medical report (PDF or image) and AI will extract the data automatically.</p>
+          <p>Upload medical reports (PDF or images) and AI will extract the data automatically.</p>
         </div>
       ) : (
-        <div className="report-list">
-          {filtered.map(r => (
-            <div key={r.id} className="report-card" onClick={() => setDetailReport(r)} style={{ cursor: 'pointer' }}>
-              <div className="report-card-header">
-                <FileText size={18} />
-                <div>
-                  <div className="report-card-title">{r.title}</div>
-                  <div className="report-card-meta">
-                    {r.report_type.replace(/_/g, ' ')} &middot; {formatDate(r.report_date)}
+        <div className="report-year-groups">
+          {groupedByYear.map(([year, yearReports]) => {
+            const isCollapsed = collapsedYears.has(year);
+            return (
+              <div key={year} className="report-year-group">
+                <button className="report-year-header" onClick={() => toggleYear(year)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                    <Calendar size={14} style={{ opacity: 0.5 }} />
+                    <span className="report-year-label">{year}</span>
                   </div>
-                </div>
-                <span className={`badge badge-${r.processing_status === 'complete' ? 'success' : r.processing_status === 'failed' ? 'error' : 'muted'}`}>
-                  {r.processing_status}
-                </span>
+                  <span className="report-year-count">{yearReports.length} document{yearReports.length !== 1 ? 's' : ''}</span>
+                </button>
+                {!isCollapsed && (
+                  <div className="report-list">
+                    {yearReports.map(r => (
+                      <div key={r.id} className="report-card" onClick={() => setDetailReport(r)} style={{ cursor: 'pointer' }}>
+                        <div className="report-card-header">
+                          <span style={{ fontSize: '1.25rem' }}>{getTypeIcon(r.report_type)}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="report-card-title">{r.title}</div>
+                            <div className="report-card-meta">
+                              {r.report_type.replace(/_/g, ' ')} · {formatDate(r.report_date)}
+                            </div>
+                          </div>
+                          <span className={`badge badge-${r.processing_status === 'complete' ? 'success' : r.processing_status === 'failed' ? 'error' : 'muted'}`}>
+                            {r.processing_status}
+                          </span>
+                        </div>
+                        {r.ai_summary && (
+                          <p className="report-card-summary">{r.ai_summary}</p>
+                        )}
+                        {r.body_regions && r.body_regions.length > 0 && (
+                          <div className="report-card-regions">
+                            {r.body_regions.map(region => (
+                              <span key={region} className="badge badge-primary">{region}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              {r.ai_summary && (
-                <p className="report-card-summary">{r.ai_summary}</p>
-              )}
-              {r.body_regions && r.body_regions.length > 0 && (
-                <div className="report-card-regions">
-                  {r.body_regions.map(region => (
-                    <span key={region} className="badge badge-primary">{region}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -120,81 +196,125 @@ function UploadModal({ open, onClose, memberId, onUpload }: {
   onUpload: (memberId: string, file: File, title: string, reportType: string, reportDate: string | null) => Promise<void>;
 }) {
   const [uploading, setUploading] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [reportType, setReportType] = useState('lab_results');
+  const [reportDate, setReportDate] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  const handleFiles = (newFiles: FileList | null) => {
+    if (!newFiles) return;
+    setFiles(prev => [...prev, ...Array.from(newFiles)]);
+  };
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!memberId || !file) return;
+    if (!memberId || files.length === 0) return;
     setUploading(true);
+    setUploadProgress(0);
 
-    const fd = new FormData(e.currentTarget);
-    const title = fd.get('title') as string;
-    const reportType = fd.get('report_type') as string;
-    const reportDate = (fd.get('report_date') as string) || null;
+    const dateVal = reportDate || null;
 
-    await onUpload(memberId, file, title, reportType, reportDate);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const title = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+      await onUpload(memberId, file, title, reportType, dateVal);
+      setUploadProgress(Math.round(((i + 1) / files.length) * 100));
+    }
+
     setUploading(false);
-    setFile(null);
+    setFiles([]);
+    setReportDate('');
+    setUploadProgress(0);
     onClose();
   };
 
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    handleFiles(e.dataTransfer.files);
+  };
+
   return (
-    <Modal open={open} onClose={onClose} title="Upload Report">
+    <Modal open={open} onClose={onClose} title="Upload Reports">
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label className="form-label">File *</label>
+          <label className="form-label">Files *</label>
           <div
             className="scanner-capture-zone"
-            style={{ padding: '1.5rem' }}
+            style={{ padding: '1.5rem', minHeight: files.length > 0 ? 'auto' : '120px' }}
             onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={e => e.preventDefault()}
           >
-            {file ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FileText size={18} />
-                <span>{file.name}</span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setFile(null); }}>
-                  <X size={14} />
-                </button>
+            {files.length > 0 ? (
+              <div style={{ width: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                  {files.map((f, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.6rem', background: 'var(--color-surface-offset)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-sm)' }}>
+                      <FileText size={14} style={{ flexShrink: 0 }} />
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                      <span style={{ color: 'var(--color-tx-faint)', fontSize: 'var(--text-xs)', flexShrink: 0 }}>{(f.size / 1024 / 1024).toFixed(1)}MB</span>
+                      <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '0.15rem' }} onClick={(e) => { e.stopPropagation(); removeFile(i); }}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-faint)', textAlign: 'center' }}>
+                  Click or drop to add more files · {files.length} selected
+                </p>
               </div>
             ) : (
               <>
                 <Upload size={24} />
-                <p>Click to select a PDF or image</p>
+                <p style={{ margin: '0.5rem 0 0.25rem' }}>Click or drag files here</p>
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-faint)' }}>PDF, JPG, PNG, WEBP, HEIC · Select multiple</p>
               </>
             )}
             <input
               ref={fileInputRef}
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.webp,.heic"
-              onChange={e => setFile(e.target.files?.[0] ?? null)}
+              multiple
+              onChange={e => { handleFiles(e.target.files); e.target.value = ''; }}
               style={{ display: 'none' }}
             />
           </div>
         </div>
 
-        <div className="form-group">
-          <label className="form-label">Title *</label>
-          <input name="title" className="input-field" required placeholder="e.g. Annual Blood Panel" />
-        </div>
-
         <div className="form-grid">
           <div className="form-group">
             <label className="form-label">Report Type</label>
-            <select name="report_type" className="select-field" defaultValue="blood_test">
+            <select className="select-field" value={reportType} onChange={e => setReportType(e.target.value)}>
               {REPORT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
           <div className="form-group">
             <label className="form-label">Report Date</label>
-            <input name="report_date" type="date" className="input-field" />
+            <input type="date" className="input-field" value={reportDate} onChange={e => setReportDate(e.target.value)} />
           </div>
         </div>
 
+        {uploading && (
+          <div style={{ margin: '0.75rem 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)', marginBottom: '0.35rem' }}>
+              <span>Uploading...</span>
+              <span>{uploadProgress}%</span>
+            </div>
+            <div style={{ height: '4px', background: 'var(--color-surface-offset)', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${uploadProgress}%`, background: 'var(--color-primary)', borderRadius: '2px', transition: 'width 300ms ease' }} />
+            </div>
+          </div>
+        )}
+
         <div className="form-actions">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={uploading || !file}>
-            {uploading ? 'Uploading...' : 'Upload & Process'}
+          <button type="submit" className="btn btn-primary" disabled={uploading || files.length === 0}>
+            {uploading ? `Uploading ${files.length} files...` : `Upload ${files.length || ''} File${files.length !== 1 ? 's' : ''}`}
           </button>
         </div>
       </form>
