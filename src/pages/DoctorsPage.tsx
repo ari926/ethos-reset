@@ -12,6 +12,7 @@ export default function DoctorsPage() {
   const [editDoctor, setEditDoctor] = useState<Doctor | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [shareLink, setShareLink] = useState<string | null>(null);
 
   useEffect(() => { loadDoctors(); }, [loadDoctors]);
 
@@ -76,9 +77,28 @@ export default function DoctorsPage() {
       last_shared_at: new Date().toISOString(),
     });
     const shareUrl = `${window.location.origin}/share/${token}`;
-    await navigator.clipboard.writeText(shareUrl);
-    setCopiedId(doc.id);
-    toast.success('Share link copied to clipboard');
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Ethos Reset — Doctor Access',
+          text: `You've been invited to view patient health data on Ethos Reset`,
+          url: shareUrl,
+        });
+        setCopiedId(doc.id);
+        toast.success('Share link sent!');
+      } catch {
+        setShareLink(shareUrl);
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopiedId(doc.id);
+        toast.success('Share link copied to clipboard');
+      } catch {
+        setShareLink(shareUrl);
+      }
+    }
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -283,6 +303,47 @@ export default function DoctorsPage() {
         title="Remove Doctor"
         message="This will permanently remove this doctor and revoke all their access. This cannot be undone."
       />
+
+      {shareLink && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem',
+        }} onClick={() => setShareLink(null)}>
+          <div style={{
+            background: 'var(--color-surface, #fff)', borderRadius: 'var(--radius-lg, 12px)',
+            padding: '1.5rem', maxWidth: '420px', width: '100%', boxShadow: 'var(--shadow-lg)',
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: 'var(--text-base)' }}>Doctor Share Link</h3>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-tx-muted)', margin: '0 0 1rem' }}>
+              Copy this link and send it to your doctor:
+            </p>
+            <input
+              type="text"
+              readOnly
+              value={shareLink}
+              className="input-field"
+              style={{ fontSize: 'var(--text-xs)', marginBottom: '1rem' }}
+              onFocus={e => e.target.select()}
+            />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(shareLink);
+                  toast.success('Copied!');
+                  setShareLink(null);
+                } catch {
+                  toast('Long-press the link above to copy it');
+                }
+              }}>
+                <Copy size={14} /> Copy Link
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShareLink(null)}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
