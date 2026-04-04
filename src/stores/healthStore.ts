@@ -643,3 +643,132 @@ export interface ScanResult {
   flagged: Array<{ ingredient: string; severity: string; reason: string }>;
   explanation: string;
 }
+
+// ─── DUAL DOCTOR CHAT ───
+
+import { HEALTH_AI_URL } from '../lib/supabase';
+
+/**
+ * Builds a concise clinical summary string from the active member's health data.
+ * Used as context for the dual AI doctors.
+ */
+export function buildHealthContext(state: {
+  familyMembers: FamilyMember[];
+  activeMemberId: string | null;
+  metrics: HealthMetric[];
+  restrictions: Restriction[];
+  reports: HealthReport[];
+  vitals: Vital[];
+  alerts: HealthAlert[];
+}): string {
+  const member = state.familyMembers.find(m => m.id === state.activeMemberId);
+  if (!member) return 'No patient data available.';
+
+  const lines: string[] = [];
+
+  // Demographics
+  const age = member.date_of_birth
+    ? Math.floor((Date.now() - new Date(member.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+    : null;
+  lines.push(`PATIENT: ${member.first_name} ${member.last_name}, ${age ? `${age}yo` : 'age unknown'}, ${member.gender ?? 'unknown gender'}, Blood type: ${member.blood_type ?? 'unknown'}, Height: ${member.height_cm ?? '?'}cm, Weight: ${member.weight_kg ?? '?'}kg`);
+
+  // Latest vitals
+  const vitalTypes = new Map<string, Vital>();
+  for (const v of state.vitals) {
+    if (!vitalTypes.has(v.vital_type)) vitalTypes.set(v.vital_type, v);
+  }
+  if (vitalTypes.size > 0) {
+    const vitalStr = Array.from(vitalTypes.values())
+      .map(v => `${v.vital_type}: ${v.value_primary}${v.value_secondary != null ? `/${v.value_secondary}` : ''} ${v.unit ?? ''} (${v.recorded_at.slice(0, 10)})`)
+      .join('; ');
+    lines.push(`VITALS: ${vitalStr}`);
+  }
+
+  // Health metrics (latest per metric name, up to 40)
+  const latestMetrics = new Map<string, HealthMetric>();
+  for (const m of state.metrics) {
+    if (!latestMetrics.has(m.metric_name)) latestMetrics.set(m.metric_name, m);
+  }
+  const metricEntries = Array.from(latestMetrics.values()).slice(0, 40);
+  if (metricEntries.length > 0) {
+    const metricStr = metricEntries
+      .map(m => {
+        let s = `${m.metric_name}: ${m.metric_value} ${m.metric_unit ?? ''}`;
+        if (m.ref_range_low != null || m.ref_range_high != null) {
+          s += ` [ref: ${m.ref_range_low ?? '?'}-${m.ref_range_high ?? '?'}]`;
+        }
+        if (m.status && m.status !== 'normal') s += ` (${m.status.toUpperCase()})`;
+        return s;
+      })
+      .join('; ');
+    lines.push(`LAB METRICS: ${metricStr}`);
+  }
+
+  // Restrictions
+  if (state.restrictions.length > 0) {
+    const rStr = state.restrictions
+      .map(r => `${r.restriction_type}: ${r.item_name} (${r.severity})${r.reaction ? ` - ${r.reaction}` : ''}`)
+      .join('; ');
+    lines.push(`RESTRICTIONS/ALLERGIES: ${rStr}`);
+  }
+
+  // Reports summary
+  if (state.reports.length > 0) {
+    const rStr = state.reports
+      .slice(0, 10)
+      .map(r => `${r.title} (${r.report_type}, ${r.report_date ?? 'no date'})${r.ai_summary ? ` — ${r.ai_summary.slice(0, 120)}` : ''}`)
+      .join('; ');
+    lines.push(`REPORTS: ${rStr}`);
+  }
+
+  // Active alerts
+  if (state.alerts.length > 0) {
+    const aStr = state.alerts
+      .filter(a => !a.dismissed)
+      .slice(0, 8)
+      .map(a => `[${a.severity.toUpperCase()}] ${a.title}: ${a.message.slice(0, 100)}`)
+      .join('; ');
+    if (aStr) lines.push(`HEALTH CONCERNS: ${aStr}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Get the count of health data points being sent as context.
+ */
+export function getHealthContextCount(state: {
+  metrics: HealthMetric[];
+  restrictions: Restriction[];
+  reports: HealthReport[];
+  vitals: Vital[];
+  alerts: HealthAlert[];
+}): number {
+  return state.metrics.length + state.restrictions.length + state.reports.length + state.vitals.length + state.alerts.filter(a => !a.dismissed).length;
+}
+
+/**
+ * Send a message to one of the dual AI doctors.
+ */
+export async function sendDualDoctorChat(
+  model: 'claude' | 'gpt',
+  messages: Array<{ role: string; content: string }>,
+  healthContext: string
+): Promise<string> {
+  try {
+    const res = await fetch(HEALTH_AI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, model, healthContext }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ error: 'Request failed' })) as { error?: string };
+      throw new Error(errData.error ?? `HTTP ${res.status}`);
+    }
+    const data = await res.json() as { response: string; doctor: string };
+    return data.response ?? 'No response received.';
+  } catch (err) {
+    console.error(`Dual doctor chat (${model}) failed:`, err);
+    return `Sorry, ${model === 'claude' ? 'Dr. Atlas' : 'Dr. Nova'} is currently unavailable. Please try again.`;
+  }
+}

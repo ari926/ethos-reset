@@ -1,0 +1,6 @@
+name = "ethos-health-ai"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+# API keys will be added as secrets via: wrangler secret put ANTHROPIC_API_KEY / OPENAI_API_KEY

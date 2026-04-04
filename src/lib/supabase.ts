@@ -13,3 +13,7 @@ export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON
 });
 
 export const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/health-ai`;
+
+// Dual AI Doctor Worker (Cloudflare)
+export const HEALTH_AI_URL = import.meta.env.VITE_HEALTH_AI_URL as string | undefined
+  ?? 'https://ethos-health-ai.ari-863.workers.dev';
