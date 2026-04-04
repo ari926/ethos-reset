@@ -412,8 +412,11 @@ export const useHealthStore = create<HealthState>((set, get) => ({
   },
 
   addDoctor: async (doctor: Partial<Doctor>) => {
-    const { error } = await supabase.from('doctors').insert(doctor);
+    // Ensure 'name' column is populated (legacy NOT NULL column)
+    const insertData = { ...doctor, name: doctor.full_name ?? doctor.email ?? '' };
+    const { error } = await supabase.from('doctors').insert(insertData);
     if (error) {
+      console.error('addDoctor error:', error);
       toast.error('Failed to add doctor');
       return;
     }
