@@ -797,7 +797,7 @@ export default function RestrictionsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<Restriction | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<RestrictionsTab>('manual');
+  const [activeTab, setActiveTab] = useState<RestrictionsTab>('food');
 
   const handleQuickAdd = (item: string) => {
     if (!activeMemberId) return;
@@ -820,23 +820,10 @@ export default function RestrictionsPage() {
             {member ? `${member.first_name}'s food & medicine restrictions` : 'Select a family member'}
           </p>
         </div>
-        {activeTab === 'manual' && (
-          <button className="btn btn-primary" onClick={() => { setEditItem(null); setModalOpen(true); }} disabled={!activeMemberId}>
-            <Plus size={14} /> Add Restriction
-          </button>
-        )}
       </div>
 
       {/* Tab Bar */}
       <div className="reports-tab-bar">
-        <button
-          className={`reports-tab${activeTab === 'manual' ? ' active' : ''}`}
-          onClick={() => setActiveTab('manual')}
-        >
-          <ShieldAlert size={15} />
-          <span>Manual</span>
-          <span className="reports-tab-count">{restrictions.length}</span>
-        </button>
         <button
           className={`reports-tab${activeTab === 'food' ? ' active' : ''}`}
           onClick={() => setActiveTab('food')}
@@ -852,16 +839,6 @@ export default function RestrictionsPage() {
           <span>Genetics</span>
         </button>
       </div>
-
-      {activeTab === 'manual' && (
-        <ManualRestrictionsTab
-          restrictions={restrictions}
-          activeMemberId={activeMemberId}
-          onAdd={handleQuickAdd}
-          onEdit={(r) => { setEditItem(r); setModalOpen(true); }}
-          onDelete={(id) => setDeleteId(id)}
-        />
-      )}
 
       {activeTab === 'food' && (
         <FoodSensitivityTab memberId={activeMemberId} />

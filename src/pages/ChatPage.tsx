@@ -17,7 +17,7 @@ import {
 } from '../stores/healthStore';
 
 type RoomTab = 'atlas' | 'nova' | 'conference';
-type MessageSender = 'user' | 'atlas' | 'nova' | 'system';
+type MessageSender = 'user' | 'atlas' | 'nova' | 'system' | 'summary';
 
 interface ChatMessage {
   id: string;
@@ -230,7 +230,6 @@ function ConferenceRoom({
 }) {
   const [input, setInput] = useState('');
   const [rounds, setRounds] = useState(1);
-  const [summary, setSummary] = useState<string | null>(null);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -244,7 +243,9 @@ function ConferenceRoom({
     (sender: 'atlas' | 'nova', msgs: ChatMessage[], extra?: string): Array<{ role: string; content: string }> => {
       const apiMsgs: Array<{ role: string; content: string }> = [];
       for (const msg of msgs) {
-        if (msg.sender === 'user' || msg.sender === 'system') {
+        if (msg.sender === 'summary') {
+          apiMsgs.push({ role: 'user', content: `[Joint Assessment Summary]: ${msg.content}` });
+        } else if (msg.sender === 'user' || msg.sender === 'system') {
           apiMsgs.push({ role: 'user', content: msg.content });
         } else if (msg.sender === sender) {
           apiMsgs.push({ role: 'assistant', content: msg.content });
@@ -306,10 +307,10 @@ function ConferenceRoom({
         setRoom(prev => ({ ...prev, messages: allMsgs, loading: { atlas: false, nova: false } }));
       }
 
-      // Generate joint summary
+      // Generate joint summary inline in the thread
       setGeneratingSummary(true);
       const convoTranscript = allMsgs
-        .filter(m => m.sender !== 'system')
+        .filter(m => m.sender !== 'system' && m.sender !== 'summary')
         .map(m => {
           const label = m.sender === 'user' ? 'Patient' : m.sender === 'atlas' ? 'Dr. Atlas' : 'Dr. Nova';
           return `${label}: ${m.content}`;
@@ -336,7 +337,9 @@ ${convoTranscript}`
       ];
 
       const summaryText = await sendDualDoctorChat('claude', summaryPrompt, healthContext);
-      setSummary(summaryText);
+      const summaryMsg: ChatMessage = { id: nextId(), sender: 'summary', content: summaryText, timestamp: Date.now() };
+      allMsgs = [...allMsgs, summaryMsg];
+      setRoom(prev => ({ ...prev, messages: allMsgs }));
       setGeneratingSummary(false);
 
       inputRef.current?.focus();
@@ -418,6 +421,32 @@ ${convoTranscript}`
             <div key={msg.id} className="chat-system-divider">
               <span>{msg.content}</span>
             </div>
+          ) : msg.sender === 'summary' ? (
+            <div key={msg.id} className="conference-summary">
+              <div className="conference-summary-header">
+                <div className="conference-summary-avatars">
+                  <div className="chat-avatar chat-avatar-atlas" style={{ width: 24, height: 24, marginRight: '-6px', zIndex: 2 }}>
+                    <Stethoscope size={11} />
+                  </div>
+                  <div className="chat-avatar chat-avatar-nova" style={{ width: 24, height: 24 }}>
+                    <Sparkles size={11} />
+                  </div>
+                </div>
+                <h3>Joint Assessment Summary</h3>
+              </div>
+              <div className="conference-summary-content">
+                {msg.content.split('\n').map((line, i) => {
+                  if (line.startsWith('## ') || line.startsWith('**') && line.endsWith('**')) {
+                    return <h4 key={i} style={{ marginTop: i > 0 ? '1rem' : 0, marginBottom: '0.35rem', fontSize: 'var(--text-sm)', fontWeight: 700 }}>{line.replace(/^##\s*/, '').replace(/\*\*/g, '')}</h4>;
+                  }
+                  if (line.startsWith('- ') || line.startsWith('• ')) {
+                    return <div key={i} style={{ paddingLeft: '1rem', position: 'relative', marginBottom: '0.25rem' }}><span style={{ position: 'absolute', left: 0 }}>•</span> {line.replace(/^[-•]\s*/, '').replace(/\*\*/g, '')}</div>;
+                  }
+                  if (line.trim() === '') return <div key={i} style={{ height: '0.5rem' }} />;
+                  return <p key={i} style={{ margin: '0.25rem 0' }}>{line.replace(/\*\*/g, '')}</p>;
+                })}
+              </div>
+            </div>
           ) : (
             <div key={msg.id} className={`chat-message chat-message-${msg.sender}`}>
               {msg.sender !== 'user' && (
@@ -468,34 +497,6 @@ ${convoTranscript}`
           <div className="conference-summary-generating">
             <Loader size={16} className="spin" />
             <span>Generating joint assessment summary...</span>
-          </div>
-        )}
-
-        {summary && (
-          <div className="conference-summary">
-            <div className="conference-summary-header">
-              <div className="conference-summary-avatars">
-                <div className="chat-avatar chat-avatar-atlas" style={{ width: 24, height: 24, marginRight: '-6px', zIndex: 2 }}>
-                  <Stethoscope size={11} />
-                </div>
-                <div className="chat-avatar chat-avatar-nova" style={{ width: 24, height: 24 }}>
-                  <Sparkles size={11} />
-                </div>
-              </div>
-              <h3>Joint Assessment Summary</h3>
-            </div>
-            <div className="conference-summary-content">
-              {summary.split('\n').map((line, i) => {
-                if (line.startsWith('## ') || line.startsWith('**') && line.endsWith('**')) {
-                  return <h4 key={i} style={{ marginTop: i > 0 ? '1rem' : 0, marginBottom: '0.35rem', fontSize: 'var(--text-sm)', fontWeight: 700 }}>{line.replace(/^##\s*/, '').replace(/\*\*/g, '')}</h4>;
-                }
-                if (line.startsWith('- ') || line.startsWith('• ')) {
-                  return <div key={i} style={{ paddingLeft: '1rem', position: 'relative', marginBottom: '0.25rem' }}><span style={{ position: 'absolute', left: 0 }}>•</span> {line.replace(/^[-•]\s*/, '').replace(/\*\*/g, '')}</div>;
-                }
-                if (line.trim() === '') return <div key={i} style={{ height: '0.5rem' }} />;
-                return <p key={i} style={{ margin: '0.25rem 0' }}>{line.replace(/\*\*/g, '')}</p>;
-              })}
-            </div>
           </div>
         )}
 
@@ -590,7 +591,7 @@ export default function ChatPage() {
           <span className="doctor-ai-tab-label">Conference</span>
           <span className="doctor-ai-tab-sub">Both debate</span>
           {conferenceRoom.messages.length > 0 && (
-            <span className="doctor-ai-tab-badge">{conferenceRoom.messages.filter(m => m.sender !== 'user' && m.sender !== 'system').length}</span>
+            <span className="doctor-ai-tab-badge">{conferenceRoom.messages.filter(m => m.sender !== 'user' && m.sender !== 'system' && (m.sender as string) !== 'summary').length}</span>
           )}
         </button>
       </div>
