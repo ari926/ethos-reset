@@ -370,9 +370,20 @@ function ReportDetailModal({ report, onClose, onDelete }: {
 
       {report.file_url && (
         <div className="section">
-          <a href={report.file_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary">
-            <Eye size={14} /> View Original File
-          </a>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <a href={report.file_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary">
+              <Eye size={14} /> Open in New Tab
+            </a>
+          </div>
+          {report.file_url.endsWith('.pdf') || report.file_mime_type === 'application/pdf' ? (
+            <iframe
+              src={report.file_url}
+              style={{ width: '100%', height: '500px', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)' }}
+              title={report.title}
+            />
+          ) : report.file_url.match(/\.(jpg|jpeg|png|webp)$/i) ? (
+            <img src={report.file_url} alt={report.title} style={{ maxWidth: '100%', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-divider)' }} />
+          ) : null}
         </div>
       )}
 
