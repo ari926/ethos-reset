@@ -21,7 +21,7 @@ export default function AlertsBanner() {
   const alerts = useHealthStore(s => s.alerts);
   const [dismissed, setDismissed] = useState<Set<string>>(loadDismissed);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   // Sync dismissed set from localStorage on mount
   useEffect(() => {

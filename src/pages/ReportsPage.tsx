@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useCallback } from 'react';
 import { useHealthStore, type HealthReport } from '../stores/healthStore';
 import { FileText, Upload, Trash2, Eye, X, Calendar, ChevronDown, ChevronRight, Beaker, ArrowLeft, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { formatDate } from '../lib/utils';
@@ -237,6 +237,130 @@ function getMetricDescription(name: string): string | null {
   return null;
 }
 
+/* ── AI Metric Analysis Component ── */
+function AiMetricAnalysis({ metricName, metricValue, metricUnit, metricStatus, refLow, refHigh, history }: {
+  metricName: string;
+  metricValue: string;
+  metricUnit: string;
+  metricStatus: string;
+  refLow: number | null;
+  refHigh: number | null;
+  history: Array<{ date: string; value: number; status: string | null }>;
+}) {
+  const { metrics } = useHealthStore();
+  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const cacheKey = `ai-metric-${metricName}-${metricValue}`;
+
+  const fetchAnalysis = useCallback(async () => {
+    // Check cache first
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) { setAnalysis(cached); setExpanded(true); return; }
+
+    setLoading(true);
+    setExpanded(true);
+
+    // Build context: gather related metrics for cross-referencing
+    const relatedMetrics = metrics
+      .filter(m => m.status !== 'normal' && m.metric_name !== metricName)
+      .sort((a, b) => (b.recorded_date ?? '').localeCompare(a.recorded_date ?? ''))
+      .slice(0, 20)
+      .map(m => `${m.metric_name}: ${m.metric_value} ${m.metric_unit ?? ''} (${m.status}, ${m.body_region}, ${m.recorded_date})`)
+      .join('\n');
+
+    const historyStr = history.slice().reverse().slice(0, 8)
+      .map(h => `${h.date}: ${h.value} (${h.status})`).join(', ');
+
+    const prompt = `You are a health AI analyzing a lab result for Aristedis Raptis, a 36-year-old male with the following medical background:
+- Radiologically isolated syndrome (brain white matter lesions consistent with MS pattern, but no clinical symptoms)
+- Active tick-borne infections: Babesia duncani (IgM positive), Bartonella elizabethae (IgG positive), Lyme C6 peptide positive
+- Chronic Group A Strep carrier (Anti-DNase B and ASO persistently 2-4x normal)
+- GI dysbiosis: persistent H. pylori with antibiotic resistance, elevated Zonulin (leaky gut), Candida, Citrobacter
+- History: Wilms tumor age 3, left nephrectomy (single kidney)
+- Genetics: COMT AA (slow detoxifier), CYP1A2 CC (slow caffeine metabolizer), high histamine pathway, HLA DQ2.5/DQ8X (celiac risk), MTHFR A1298C heterozygous
+- Food sensitivities: HIGH reactivity to casein, cow's milk, wheat, corn, egg yolk
+
+Current metric being analyzed:
+**${metricName}: ${metricValue} ${metricUnit}** (Status: ${metricStatus})
+Reference range: ${refLow ?? '—'} – ${refHigh ?? '—'} ${metricUnit}
+History: ${historyStr || 'No prior readings'}
+
+Other abnormal metrics for context:
+${relatedMetrics || 'None available'}
+
+Write a personalized analysis in 3-4 short paragraphs at a 10th grade reading level:
+1. WHAT IS THIS TEST? (1-2 sentences, simple language)
+2. YOUR RESULT: Is it normal or not? If abnormal, what could be causing it given Ari's specific medical conditions?
+3. CONNECTIONS: How does this relate to other findings in his labs? Cross-reference with his infections, autoimmune markers, genetics, or gut health.
+4. WHAT TO DO: Any actionable insight or what to discuss with his doctors.
+
+Keep it under 200 words. Be direct and personal — say "your" not "the patient's". No medical jargon without explaining it.`;
+
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 400,
+          temperature: 0.3,
+        }),
+      });
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content ?? 'Analysis unavailable.';
+      setAnalysis(text);
+      sessionStorage.setItem(cacheKey, text);
+    } catch {
+      setAnalysis('Could not generate analysis. Check your connection.');
+    }
+    setLoading(false);
+  }, [metricName, metricValue, metricUnit, metricStatus, refLow, refHigh, history, metrics, cacheKey]);
+
+  return (
+    <div style={{
+      marginBottom: '1rem',
+      borderRadius: 'var(--radius-md)',
+      border: '1px solid rgba(139, 92, 246, 0.15)',
+      overflow: 'hidden',
+    }}>
+      <button
+        onClick={expanded && analysis ? () => setExpanded(false) : fetchAnalysis}
+        style={{
+          width: '100%',
+          padding: '0.6rem 1rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.06))',
+          border: 'none',
+          cursor: 'pointer',
+          fontSize: 'var(--text-sm)',
+          fontWeight: 600,
+          color: 'var(--color-primary)',
+        }}
+      >
+        <span style={{ fontSize: '16px' }}>🧠</span>
+        {loading ? 'Analyzing with AI...' : expanded ? 'AI Analysis (click to collapse)' : 'Get AI Analysis — personalized to your health'}
+        {loading && <span className="spinning" style={{ width: 14, height: 14, border: '2px solid var(--color-divider)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', display: 'inline-block' }} />}
+      </button>
+      {expanded && analysis && (
+        <div style={{
+          padding: '0.75rem 1rem',
+          fontSize: 'var(--text-sm)',
+          lineHeight: 1.7,
+          color: 'var(--color-tx-secondary)',
+          background: 'var(--color-surface)',
+          whiteSpace: 'pre-wrap',
+        }}>
+          {analysis}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LabExplorer() {
   const { metrics } = useHealthStore();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -358,6 +482,8 @@ function LabExplorer() {
               </div>
             ) : null;
           })()}
+
+          <AiMetricAnalysis metricName={metric.name} metricValue={metric.latestValue} metricUnit={metric.unit ?? ''} metricStatus={metric.status ?? 'normal'} refLow={metric.refLow} refHigh={metric.refHigh} history={metric.history} />
 
           {chartData.length >= 2 ? (
             <div style={{ marginTop: '0.5rem' }}>
