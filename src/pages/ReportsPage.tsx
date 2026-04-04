@@ -147,7 +147,7 @@ function getMetricDescription(name: string): string | null {
     'ferritin': 'Ferritin reflects your body\'s iron stores. Low levels mean low iron (often causing fatigue), while very high levels can indicate inflammation or iron overload.',
     'iron': 'Iron is essential for making hemoglobin and carrying oxygen. Low iron causes anemia and fatigue; too much iron can damage organs.',
     // Vitamins
-    'vitamin d': 'Vitamin D helps your body absorb calcium and supports immune function. Low levels are very common and linked to bone weakness, fatigue, and mood changes.',
+    'vitamin d 25-hydroxy': 'Vitamin D supports immune function, bone health, and mood. Your levels have fluctuated — the goal is 50-80 ng/mL. Your DaVinci ADK supplement helps maintain optimal levels.',
     'vitamin b12': 'Vitamin B12 is vital for nerve function and making red blood cells. Deficiency can cause fatigue, numbness, and memory problems.',
     'folate': 'Folate (vitamin B9) is needed for cell growth and DNA repair. Low levels can cause anemia and are especially important during pregnancy.',
     // Metabolic
@@ -166,6 +166,67 @@ function getMetricDescription(name: string): string | null {
     'potassium': 'Potassium is critical for heart rhythm and muscle function. Both very high and very low levels can be dangerous for your heart.',
     'calcium': 'Calcium is essential for bones, muscles, and nerves. Abnormal blood calcium can indicate parathyroid, kidney, or bone problems.',
     'magnesium': 'Magnesium supports over 300 enzyme reactions including muscle, nerve, and heart function. Low levels are common and can cause cramps, fatigue, and irregular heartbeat.',
+    'chloride': 'Chloride works with sodium to maintain fluid balance. Abnormal levels usually follow sodium changes and can indicate dehydration or kidney issues.',
+    'co2': 'CO2 (bicarbonate) helps maintain your blood\'s acid-base balance. Low levels can mean your blood is too acidic, while high levels may suggest it\'s too alkaline.',
+    // Immune markers
+    'shbg': 'Sex Hormone Binding Globulin is a protein that binds to testosterone and estrogen, controlling how much is available for your body to use. High SHBG means less free testosterone is available, which can affect energy, libido, and muscle building.',
+    'anti-dnase b': 'Anti-DNase B is an antibody your body makes to fight Group A Streptococcus bacteria. Persistently high levels mean your body has been battling a strep infection — possibly chronic. This is important because chronic strep can trigger autoimmune reactions.',
+    'antistreptolysin': 'ASO (Antistreptolysin O) antibodies rise after a strep infection. Persistently elevated levels, like yours, suggest your body is still fighting strep bacteria. This chronic immune activation can contribute to inflammation throughout your body.',
+    'ana': 'ANA (Antinuclear Antibody) tests for autoimmune activity. A positive result means your immune system may be attacking your own tissues. The 1:160 homogeneous pattern can be seen in conditions like lupus, MS, and other autoimmune diseases.',
+    // Lyme / Tick-borne
+    'bartonella': 'Bartonella is a bacteria spread by ticks, fleas, and cat scratches. A positive IgG means your body has antibodies against this infection — either past or current. Bartonella can cause fatigue, brain fog, joint pain, and neurological symptoms.',
+    'babesia': 'Babesia is a parasite that infects red blood cells, spread by ticks. A positive IgM means ACTIVE infection. Symptoms include fatigue, sweats, chills, and headaches. It often co-occurs with Lyme disease and needs specific treatment (typically atovaquone + azithromycin).',
+    'lyme': 'Lyme disease is caused by Borrelia bacteria from tick bites. A positive C6 peptide or antibody test confirms exposure. Lyme can cause joint pain, fatigue, brain fog, and neurological issues. Early treatment with antibiotics is important.',
+    'c6 peptide': 'The C6 Peptide test is one of the most specific tests for Lyme disease. A positive result (index >1.09) confirms your immune system has responded to Borrelia bacteria. Your index of 2.78 is clearly positive.',
+    'neurofilament': 'Neurofilament Light Chain (NFL) is released when nerve cells are damaged. Normal levels are reassuring — they mean your nerves are not actively being destroyed. This is important for monitoring conditions like MS.',
+    'nmo': 'NMO (Neuromyelitis Optica) antibodies attack a specific protein in the brain and spinal cord. A negative result rules out NMO, which is important because it requires different treatment than MS.',
+    'aqp4': 'Aquaporin-4 antibodies are specific to NMO (Neuromyelitis Optica). Negative is good — it means you don\'t have this particular autoimmune condition.',
+    'mog antibody': 'MOG (Myelin Oligodendrocyte Glycoprotein) antibodies attack the coating on nerve fibers. Negative rules out MOG antibody disease, helping confirm the diagnosis.',
+    // GI markers
+    'h. pylori': 'H. pylori is a bacteria that lives in your stomach and can cause ulcers, acid reflux, and stomach inflammation. Your tests show persistent infection with antibiotic resistance — meaning standard antibiotics won\'t work. Natural protocols like Matula tea are being used instead.',
+    'helicobacter': 'H. pylori is a bacteria that lives in your stomach and can cause ulcers, acid reflux, and stomach inflammation. Persistent infection needs targeted treatment.',
+    'zonulin': 'Zonulin controls the "gates" between cells in your gut lining. High levels mean those gates are open too wide — a condition called "leaky gut." This allows food particles and bacteria to enter your bloodstream, triggering immune reactions and inflammation throughout your body.',
+    'calprotectin': 'Calprotectin measures inflammation specifically in your intestines. Normal levels are good — it means you don\'t have active inflammatory bowel disease (IBD) like Crohn\'s or colitis.',
+    'secretory iga': 'Secretory IgA is your gut\'s first line of immune defense. High levels mean your gut immune system is working overtime to fight something — often infections or food reactions. Low levels leave you more vulnerable to gut infections.',
+    'elastase': 'Elastase measures how well your pancreas makes digestive enzymes. Normal levels mean your pancreas is doing its job properly — you\'re digesting proteins and fats well.',
+    'candida': 'Candida is a yeast that naturally lives in your gut. When it overgrows (above 5,000), it can cause bloating, brain fog, sugar cravings, and skin issues. It often overgrows after antibiotic use.',
+    'citrobacter': 'Citrobacter is a bacteria associated with inflammation and autoimmune reactions in the gut. Elevated levels can contribute to leaky gut and immune activation.',
+    'streptococcus': 'Streptococcus in your gut is linked to autoimmune reactions. High gut strep, combined with your elevated blood strep antibodies, suggests your gut may be a reservoir for the strep driving your immune response.',
+    'salmonella': 'Salmonella is a bacterial pathogen that causes food poisoning. Finding it in a stool test means an active or recent infection requiring treatment.',
+    'klebsiella': 'Klebsiella is a bacteria linked to autoimmune conditions, particularly ankylosing spondylitis. High levels in your gut may contribute to systemic inflammation.',
+    'akkermansia': 'Akkermansia muciniphila is a GOOD bacteria that strengthens your gut lining. Low or absent levels (like in your 2023 test) mean your gut barrier is weakened. The Pendulum supplement you\'re taking is specifically designed to restore it.',
+    'bacteroidetes': 'Bacteroidetes is one of the two major bacterial families in your gut. The ratio between Bacteroidetes and Firmicutes affects your metabolism, immune system, and inflammation levels.',
+    // Neural Zoomer
+    'anti-myelin': 'Anti-Myelin antibodies attack the protective coating (myelin) on nerve fibers. Elevated levels indicate your immune system is targeting your own nerve insulation — this is the core mechanism behind demyelinating conditions like MS.',
+    'anti-glycine receptor': 'Anti-Glycine Receptor antibodies attack receptors that help calm nerve signals. Elevated levels can cause muscle stiffness, spasms, and neurological symptoms. Your level of 23.1 is more than double the normal limit.',
+    'anti-contactin': 'Anti-Contactin-Associated Protein (CASPR2) antibodies attack proteins needed for nerve signal transmission. Elevated levels are linked to pain syndromes, seizures, and cognitive issues. Your level of 27.0 is nearly 3x the normal limit.',
+    'anti-dopamine receptor': 'Anti-Dopamine Receptor antibodies attack the brain\'s dopamine signaling system. Elevated levels can affect mood, motivation, movement, and cognitive function.',
+    'anti-endothelin': 'Anti-Endothelin A Receptor antibodies affect blood vessel constriction in the brain. Elevated levels can contribute to headaches, blood pressure issues, and reduced blood flow to the brain.',
+    'anti-ebv': 'Epstein-Barr Virus antibodies show past or reactivated EBV infection. EBV infects most people as kids (mono), but can reactivate later. Recent research strongly links EBV reactivation to triggering MS and other autoimmune conditions.',
+    'ebv': 'Epstein-Barr Virus (EBV) is the virus that causes mono. Most people carry it lifelong. However, reactivation (shown by high IgG levels) is now considered a major trigger for MS and autoimmune conditions.',
+    // Heavy metals
+    'mercury': 'Mercury is a toxic heavy metal found mainly in fish (especially tuna, swordfish, king mackerel) and dental fillings. It accumulates in your brain and kidneys over time. Your levels have been borderline — reducing fish intake and using chelation support (like Ortho Turiva) helps clear it.',
+    'gadolinium': 'Gadolinium is the contrast dye used in MRI scans. It\'s supposed to be cleared by your kidneys quickly, but small amounts can deposit in tissue. Your elevated hair level is from your multiple brain MRIs. With only one kidney, clearance may be slower.',
+    'lead': 'Lead is a toxic metal that can accumulate from old paint, water pipes, and environmental exposure. Even low levels can affect brain function, blood pressure, and kidney health over time.',
+    'arsenic': 'Arsenic exposure comes from rice, groundwater, and some treated wood. Low levels are generally safe, but chronic exposure can affect skin, nerves, and cancer risk.',
+    // Hormones
+    'testosterone total': 'Total testosterone includes both free (active) and bound forms. Your levels have been high (874-1235 ng/dL), likely from supplementation. While this gives energy and muscle benefits, very high levels combined with high SHBG need monitoring.',
+    'free testosterone': 'Free testosterone is the portion actually available for your body to use (not bound to SHBG). Despite your high total testosterone, your free T is normal because your SHBG is binding much of it up.',
+    'dihydrotestosterone': 'DHT is a more potent form of testosterone. It\'s important for male development but excess can cause hair loss and prostate growth. Your levels have been normal to slightly high.',
+    'prolactin': 'Prolactin is a pituitary hormone. High levels in men can cause low libido and fatigue, and may indicate a pituitary issue. Your levels are normal.',
+    'psa': 'PSA (Prostate-Specific Antigen) screens for prostate health. Your levels are well within normal range, which is reassuring.',
+    // Other
+    'vitamin d': 'Vitamin D supports immune function, bone health, and mood. Your levels have fluctuated (25.8 → 62.6 → 86.3 → 61.2). The goal is 50-80 ng/mL. Your DaVinci ADK supplement helps maintain optimal levels.',
+    'homocysteine': 'Homocysteine is an amino acid that, when elevated, increases risk for heart disease and stroke. It\'s also a marker of methylation — the process your body uses to repair DNA. Your levels improved from 10.6 to 7.4 with B vitamin supplementation.',
+    'dhea': 'DHEA-Sulfate is a hormone precursor your adrenal glands produce. It gets converted into testosterone and estrogen. Levels naturally decline with age.',
+    'glyphosate': 'Glyphosate is the active ingredient in Roundup weed killer. It\'s found in non-organic food, especially wheat and oats. Your level is detectable but not alarming. Eating organic helps reduce exposure.',
+    // Cancer screening
+    'grail': 'The Grail Galleri test looks for cancer DNA fragments circulating in your blood. "No Cancer Signal Detected" is excellent news — it means no signs of over 50 types of cancer were found.',
+    // MRI
+    'brain white matter': 'White matter lesions on your MRI are areas where the protective myelin coating on nerve fibers has been damaged (demyelination). This is the hallmark finding in MS. Your doctors are monitoring these closely.',
+    'brain demyelinating': 'Demyelinating plaques are areas of nerve damage consistent with MS. The pattern on your MRI — periventricular (near brain ventricles) with callosal-septal involvement — is classic for MS.',
+    'coronary calcium': 'Your coronary calcium score of 0 is the best possible result. It means there is NO calcium buildup in your heart arteries — your cardiovascular risk from plaque is very low.',
+    'dexa': 'Your DEXA scan shows normal bone density — no osteopenia or osteoporosis. This is important to monitor especially if you ever need steroid treatments.',
   };
 
   // Try exact match first, then partial match
