@@ -195,7 +195,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
     const [reportsRes, restrictionsRes, metricsRes, vitalsRes] = await Promise.all([
       supabase.from('health_reports').select('*').eq('member_id', memberId).order('report_date', { ascending: false }),
       supabase.from('restrictions').select('*').eq('member_id', memberId).order('created_at', { ascending: false }),
-      supabase.from('health_metrics').select('*').eq('member_id', memberId).order('recorded_date', { ascending: false }).limit(200),
+      supabase.from('health_metrics').select('*').eq('member_id', memberId).order('recorded_date', { ascending: false }).limit(2000),
       supabase.from('vitals').select('*').eq('member_id', memberId).order('recorded_at', { ascending: false }).limit(100),
     ]);
 
