@@ -1,8 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-// Ethos Reset dedicated Supabase project
-const SUPABASE_URL = 'https://cfbzcwechpspwsssdpqc.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmYnpjd2VjaHBzcHdzc3NkcHFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyOTc5ODgsImV4cCI6MjA5MDg3Mzk4OH0.qtzjgmZ6rQzp8e-L-Mz_--mtgX1KMZC0Tr4glmlZ33A';
+// Ethos Reset Supabase (ari926's Org - cxgflrxcvtexibcbthie)
+const SUPABASE_URL = 'https://cxgflrxcvtexibcbthie.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4Z2ZscnhjdnRleGliY2J0aGllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyODU1NTYsImV4cCI6MjA5MDg2MTU1Nn0.M9s8wlIsWx7xgWh4_Hho80IvuCEkp8fHQrcGJcpAaOY';
 
 export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
