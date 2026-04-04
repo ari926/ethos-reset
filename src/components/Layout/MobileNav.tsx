@@ -1,7 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Activity,
   Camera,
   MessageCircle,
   Users,
