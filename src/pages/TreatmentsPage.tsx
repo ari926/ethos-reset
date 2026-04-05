@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useHealthStore } from '../stores/healthStore';
 import type { Treatment } from '../stores/healthStore';
+import { HEALTH_AI_URL } from '../lib/supabase';
 import Modal from '../components/common/Modal';
-import { Pill, Plus, Square, Calendar, User } from 'lucide-react';
+import { Pill, Plus, Square, Calendar, User, Camera, Loader } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const CATEGORIES = ['Medications', 'Supplements', 'Protocols', 'Therapy'] as const;
 
@@ -10,6 +12,61 @@ export default function TreatmentsPage() {
   const { treatments, activeMemberId, addTreatment, updateTreatment, deleteTreatment } = useHealthStore();
   const [tab, setTab] = useState<'active' | 'past'>('active');
   const [modalOpen, setModalOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<Partial<Treatment> | null>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+
+  const handleScanPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanning(true);
+
+    try {
+      // Convert to base64
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const mimeType = file.type || 'image/jpeg';
+
+      // Call AI to identify the medication
+      const res = await fetch(HEALTH_AI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'scan-treatment',
+          image_base64: base64,
+          mime_type: mimeType,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Scan failed');
+      const data = await res.json();
+
+      setScanResult({
+        name: data.name ?? '',
+        category: data.category ?? 'Medications',
+        dosage: data.dosage ?? '',
+        frequency: data.frequency ?? '',
+        reason: data.reason ?? '',
+        notes: data.notes ?? '',
+      });
+      setModalOpen(true);
+      toast.success(`Identified: ${data.name}`);
+    } catch (err) {
+      console.error('Scan error:', err);
+      toast.error('Could not identify medication. Try adding manually.');
+    } finally {
+      setScanning(false);
+      if (scanInputRef.current) scanInputRef.current.value = '';
+    }
+  };
 
   const activeTreatments = useMemo(() => treatments.filter(t => t.is_active), [treatments]);
   const pastTreatments = useMemo(() => treatments.filter(t => !t.is_active), [treatments]);
@@ -45,9 +102,27 @@ export default function TreatmentsPage() {
           <h1 className="view-title">Treatment Tracker</h1>
           <p className="view-subtitle">{activeTreatments.length} active treatment{activeTreatments.length === 1 ? '' : 's'}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
-          <Plus size={14} /> Add Treatment
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <input
+            ref={scanInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={handleScanPhoto}
+          />
+          <button
+            className="btn btn-secondary"
+            onClick={() => scanInputRef.current?.click()}
+            disabled={scanning}
+          >
+            {scanning ? <Loader size={14} className="spin" /> : <Camera size={14} />}
+            {scanning ? 'Scanning...' : 'Scan'}
+          </button>
+          <button className="btn btn-primary" onClick={() => { setScanResult(null); setModalOpen(true); }}>
+            <Plus size={14} /> Add
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -132,9 +207,10 @@ export default function TreatmentsPage() {
 
       <AddTreatmentModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => { setModalOpen(false); setScanResult(null); }}
         memberId={activeMemberId}
         onSave={addTreatment}
+        prefill={scanResult}
       />
     </div>
   );
@@ -189,11 +265,12 @@ function TreatmentCard({ treatment: t, onStop }: { treatment: Treatment; onStop:
   );
 }
 
-function AddTreatmentModal({ open, onClose, memberId, onSave }: {
+function AddTreatmentModal({ open, onClose, memberId, onSave, prefill }: {
   open: boolean;
   onClose: () => void;
   memberId: string | null;
   onSave: (t: Partial<Treatment>) => Promise<void>;
+  prefill?: Partial<Treatment> | null;
 }) {
   const [saving, setSaving] = useState(false);
 
@@ -225,13 +302,13 @@ function AddTreatmentModal({ open, onClose, memberId, onSave }: {
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label className="form-label">Name *</label>
-          <input name="name" className="input-field" placeholder="e.g. Vitamin D, Metformin" required />
+          <input name="name" className="input-field" placeholder="e.g. Vitamin D, Metformin" required defaultValue={prefill?.name ?? ''} key={prefill?.name ?? 'empty'} />
         </div>
 
         <div className="form-grid">
           <div className="form-group">
             <label className="form-label">Category</label>
-            <select name="category" className="select-field" defaultValue="Supplements">
+            <select name="category" className="select-field" defaultValue={prefill?.category ?? 'Supplements'} key={`cat-${prefill?.name ?? ''}`}>
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
@@ -244,11 +321,11 @@ function AddTreatmentModal({ open, onClose, memberId, onSave }: {
         <div className="form-grid">
           <div className="form-group">
             <label className="form-label">Dosage</label>
-            <input name="dosage" className="input-field" placeholder="e.g. 5000 IU" />
+            <input name="dosage" className="input-field" placeholder="e.g. 5000 IU" defaultValue={prefill?.dosage ?? ''} key={`dos-${prefill?.name ?? ''}`} />
           </div>
           <div className="form-group">
             <label className="form-label">Frequency</label>
-            <input name="frequency" className="input-field" placeholder="e.g. Daily, 2x/week" />
+            <input name="frequency" className="input-field" placeholder="e.g. Daily, 2x/week" defaultValue={prefill?.frequency ?? ''} key={`freq-${prefill?.name ?? ''}`} />
           </div>
         </div>
 
@@ -259,7 +336,7 @@ function AddTreatmentModal({ open, onClose, memberId, onSave }: {
 
         <div className="form-group">
           <label className="form-label">Reason</label>
-          <input name="reason" className="input-field" placeholder="Why this treatment was started" />
+          <input name="reason" className="input-field" placeholder="Why this treatment was started" defaultValue={prefill?.reason ?? ''} key={`rea-${prefill?.name ?? ''}`} />
         </div>
 
         <div className="form-group">

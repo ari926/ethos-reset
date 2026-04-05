@@ -482,6 +482,66 @@ export default {
         });
       }
 
+      // Route: Scan Treatment (identify medication from photo)
+      if ('action' in body && body.action === 'scan-treatment') {
+        const { image_base64, mime_type } = body as { image_base64: string; mime_type: string };
+        if (!image_base64) {
+          return new Response(JSON.stringify({ error: 'Missing image_base64' }), {
+            status: 400,
+            headers: { ...headers, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const treatmentScanPrompt = `You are a medication identification system. The user will show you a photo of a medication bottle, supplement bottle, pill box, prescription label, or similar.
+
+Identify the product and extract:
+- name: The medication or supplement name (e.g. "Vitamin D3", "Metformin", "NAC")
+- category: One of "Medications", "Supplements", "Protocols", "Therapy"
+- dosage: The dosage per unit (e.g. "5000 IU", "500mg", "100mcg")
+- frequency: Suggested frequency if visible on label (e.g. "1 daily", "2 capsules daily")
+- reason: Common medical reason for taking this (e.g. "Vitamin D deficiency", "Blood sugar management", "Glutathione support")
+- notes: Any additional relevant info from the label (ingredients, warnings, brand)
+
+Respond with valid JSON only — no markdown:
+{"name":"...","category":"...","dosage":"...","frequency":"...","reason":"...","notes":"..."}`;
+
+        const treatScanRes = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            max_tokens: 512,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: treatmentScanPrompt },
+              { role: 'user', content: [
+                { type: 'image_url', image_url: { url: `data:${mime_type};base64,${image_base64}` } },
+                { type: 'text', text: 'Identify this medication/supplement. Respond with JSON only.' },
+              ]},
+            ],
+          }),
+        });
+
+        if (!treatScanRes.ok) {
+          const errText = await treatScanRes.text();
+          throw new Error(`OpenAI scan error ${treatScanRes.status}: ${errText}`);
+        }
+
+        const treatScanData = await treatScanRes.json() as { choices: Array<{ message: { content: string } }> };
+        let treatJson = treatScanData.choices[0]?.message?.content ?? '{}';
+        if (treatJson.startsWith('```')) {
+          treatJson = treatJson.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+        }
+
+        return new Response(treatJson, {
+          status: 200,
+          headers: { ...headers, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Route: Scan (food/medicine image analysis)
       if ('action' in body && body.action === 'scan') {
         const scanBody = body as ScanRequestBody;

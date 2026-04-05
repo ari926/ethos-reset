@@ -3,11 +3,90 @@ import { useHealthStore } from '../stores/healthStore';
 
 const PALETTE = ['#2dd4bf', '#818cf8', '#f472b6', '#fb923c', '#34d399'];
 
+interface InsightGroup {
+  name: string;
+  keywords: string[];
+  description: string;
+  whatToWatch: string;
+}
+
+const INSIGHT_GROUPS: InsightGroup[] = [
+  {
+    name: 'Lipid Panel',
+    keywords: ['ldl cholesterol', 'hdl cholesterol', 'total cholesterol', 'triglyceride', 'non-hdl'],
+    description: 'Core markers for heart disease risk. LDL and Non-HDL carry cholesterol into arteries, HDL removes it.',
+    whatToWatch: 'LDL below 100, HDL above 40, Triglycerides below 150. Trending up = increasing risk.',
+  },
+  {
+    name: 'Advanced Cardiac',
+    keywords: ['apob', 'apolipoprotein', 'lp(a)', 'lipoprotein', 'non-hdlc'],
+    description: 'Deeper heart risk markers. ApoB counts the actual particles depositing in arteries — more accurate than LDL alone.',
+    whatToWatch: 'ApoB below 90 mg/dL is optimal. Lp(a) is genetic — if high, it stays high, but knowing helps guide treatment.',
+  },
+  {
+    name: 'Immune Cells',
+    keywords: ['cd3', 'cd4', 'cd8', 'nk cell', 'lymphocyte', 'wbc', 'white blood'],
+    description: 'Your immune army. CD4 cells coordinate defense, CD8 cells kill infected cells, NK cells target cancer.',
+    whatToWatch: 'Elevated CD8 with normal CD4 suggests chronic infection. CD4:CD8 ratio below 1.0 is concerning.',
+  },
+  {
+    name: 'Infection Markers',
+    keywords: ['babesia', 'bartonella', 'lyme', 'borrelia', 'ehrlichia', 'anaplasma'],
+    description: 'Tick-borne illness antibodies. IgM = active/recent infection, IgG = past exposure or chronic.',
+    whatToWatch: 'Positive IgM with symptoms = likely active infection. Watch for declining titers during treatment.',
+  },
+  {
+    name: 'Strep & Autoimmune',
+    keywords: ['aso', 'anti-dnase', 'antistreptolysin', 'streptolysin'],
+    description: 'Streptococcal antibodies that can trigger autoimmune responses including PANS/PANDAS.',
+    whatToWatch: 'ASO above 200 and anti-DNase B above 120 suggest ongoing strep-driven inflammation.',
+  },
+  {
+    name: 'Gut Permeability',
+    keywords: ['zonulin', 'calprotectin', 'casein', "cow's milk", 'gliadin', 'candida', 'h. pylori'],
+    description: 'Markers for leaky gut and intestinal inflammation. Zonulin controls the gaps between gut cells.',
+    whatToWatch: 'High Zonulin = leaky gut. Food IgG4 antibodies indicate immune reaction to those foods.',
+  },
+  {
+    name: 'Liver Function',
+    keywords: ['ast', 'alt', 'bilirubin', 'albumin', 'ggt', 'alkaline phosphatase'],
+    description: 'How well your liver is filtering toxins and processing nutrients. AST/ALT are liver cell damage markers.',
+    whatToWatch: 'ALT above 40 or AST above 35 suggest liver stress. Rising trend = worsening.',
+  },
+  {
+    name: 'Kidney Function',
+    keywords: ['egfr', 'creatinine', 'bun', 'uric acid', 'cystatin'],
+    description: 'How efficiently your kidneys filter blood. eGFR is the gold standard kidney performance metric.',
+    whatToWatch: 'eGFR above 90 is healthy. Below 60 needs attention. Creatinine rising over time is a concern.',
+  },
+  {
+    name: 'Thyroid & Hormones',
+    keywords: ['tsh', 'testosterone', 'shbg', 'thyroid', 't3', 't4', 'estradiol', 'cortisol', 'dhea'],
+    description: 'Hormones regulate energy, mood, metabolism, and immune function. Even small imbalances cause symptoms.',
+    whatToWatch: 'TSH between 1-2.5 is optimal (not just "normal"). High SHBG reduces free testosterone effect.',
+  },
+  {
+    name: 'Blood Sugar',
+    keywords: ['glucose', 'hba1c', 'hemoglobin a1c', 'insulin', 'homa'],
+    description: 'Metabolic health markers. HbA1c shows your 3-month blood sugar average, not just today.',
+    whatToWatch: 'HbA1c below 5.7 is normal. Fasting insulin below 5 is optimal. Rising insulin = early warning.',
+  },
+  {
+    name: 'Vitamins & Minerals',
+    keywords: ['vitamin d', 'b12', 'folate', 'iron', 'ferritin', 'magnesium', 'zinc', 'selenium'],
+    description: 'Essential nutrients your body needs for thousands of chemical reactions every day.',
+    whatToWatch: 'Vitamin D 50-80 is optimal (not just >30). B12 above 500. Ferritin 40-100 is ideal.',
+  },
+  {
+    name: 'Neurological',
+    keywords: ['mri', 'neurofilament', 'b12', 'folate', 'prolactin'],
+    description: 'Brain and nervous system markers. Neurofilament light chain indicates nerve damage.',
+    whatToWatch: 'Elevated NfL suggests active neurological damage. Brain MRI lesions need tracking over time.',
+  },
+];
+
 const PRESET_VIEWS: Record<string, string[]> = {
-  Cardiovascular: ['ldl', 'cholesterol', 'triglyceride', 'hdl', 'apob'],
-  Immune: ['cd3', 'cd4', 'cd8', 'wbc', 'lymphocyte'],
-  Inflammation: ['calprotectin', 'aso', 'anti-dnase', 'zonulin', 'h. pylori'],
-  'All Flagged': [], // special: selects all metrics with non-normal status
+  'All Flagged': [],
 };
 
 const DATE_RANGES = [
@@ -127,15 +206,27 @@ export default function TrendsPage() {
     return Array.from(dateSet).sort();
   }, [chartData]);
 
+  const [activeGroup, setActiveGroup] = useState<string | null>(null);
+
+  // Handle insight group clicks
+  const handleInsightGroup = (group: InsightGroup) => {
+    const matched = availableMetrics
+      .filter(m => group.keywords.some(kw => m.name.toLowerCase().includes(kw)))
+      .map(m => m.name)
+      .slice(0, 5);
+    setSelected(matched);
+    setActiveGroup(group.name);
+  };
+
   // Handle preset view clicks
   const handlePreset = (key: string) => {
     if (key === 'All Flagged') {
-      // Select all metrics with non-normal latest status
       const flagged = availableMetrics
         .filter(m => m.latestStatus && m.latestStatus !== 'normal')
         .map(m => m.name)
         .slice(0, 5);
       setSelected(flagged);
+      setActiveGroup('All Flagged');
     } else {
       const keywords = PRESET_VIEWS[key] ?? [];
       const matched = availableMetrics
@@ -143,8 +234,25 @@ export default function TrendsPage() {
         .map(m => m.name)
         .slice(0, 5);
       setSelected(matched);
+      setActiveGroup(key);
     }
   };
+
+  // Get active insight group for description
+  const activeInsight = INSIGHT_GROUPS.find(g => g.name === activeGroup);
+
+  // Compute how many metrics match each insight group (for counts)
+  const groupCounts = useMemo(() => {
+    const counts: Record<string, { total: number; flagged: number }> = {};
+    for (const group of INSIGHT_GROUPS) {
+      const matched = availableMetrics.filter(m => group.keywords.some(kw => m.name.toLowerCase().includes(kw)));
+      counts[group.name] = {
+        total: matched.length,
+        flagged: matched.filter(m => m.latestStatus && m.latestStatus !== 'normal').length,
+      };
+    }
+    return counts;
+  }, [availableMetrics]);
 
   const toggleMetric = (name: string) => {
     setSelected(prev => {
@@ -371,17 +479,31 @@ export default function TrendsPage() {
         </div>
       </div>
 
-      {/* Preset views */}
+      {/* Insight description for active group */}
+      {activeInsight && selected.length > 0 && (
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-divider)',
+          borderRadius: 'var(--radius-md)',
+          padding: '1rem',
+          marginBottom: '1rem',
+        }}>
+          <h3 style={{ margin: '0 0 0.35rem', fontSize: 'var(--text-sm)', fontWeight: 600 }}>{activeInsight.name}</h3>
+          <p style={{ margin: '0 0 0.35rem', fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)', lineHeight: 1.5 }}>{activeInsight.description}</p>
+          <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)', lineHeight: 1.5 }}>
+            <strong>What to watch:</strong> {activeInsight.whatToWatch}
+          </p>
+        </div>
+      )}
+
+      {/* All Flagged quick button */}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-        {Object.keys(PRESET_VIEWS).map(key => (
-          <button
-            key={key}
-            className="btn btn-secondary btn-sm"
-            onClick={() => handlePreset(key)}
-          >
-            {key}
-          </button>
-        ))}
+        <button
+          className={`btn btn-sm ${activeGroup === 'All Flagged' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => handlePreset('All Flagged')}
+        >
+          ⚠️ All Flagged
+        </button>
       </div>
 
       {/* Metric picker */}
@@ -522,6 +644,66 @@ export default function TrendsPage() {
           </div>
         </div>
       )}
+
+      {/* Insight Groups Grid */}
+      <div style={{ marginTop: '2rem' }}>
+        <h2 style={{ fontSize: 'var(--text-base)', fontWeight: 600, marginBottom: '1rem' }}>Explore by Category</h2>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+          gap: '0.75rem',
+        }}>
+          {INSIGHT_GROUPS.map(group => {
+            const counts = groupCounts[group.name] ?? { total: 0, flagged: 0 };
+            const isActive = activeGroup === group.name;
+            return (
+              <button
+                key={group.name}
+                onClick={() => handleInsightGroup(group)}
+                style={{
+                  background: isActive ? 'var(--color-primary)' : 'var(--color-surface)',
+                  color: isActive ? '#fff' : 'var(--color-tx)',
+                  border: `1px solid ${isActive ? 'var(--color-primary)' : 'var(--color-divider)'}`,
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.85rem 1rem',
+                  cursor: counts.total > 0 ? 'pointer' : 'default',
+                  opacity: counts.total > 0 ? 1 : 0.5,
+                  textAlign: 'left',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{group.name}</span>
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    <span style={{
+                      fontSize: '10px', padding: '0.1rem 0.4rem', borderRadius: '4px',
+                      background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--color-surface-offset)',
+                      color: isActive ? '#fff' : 'var(--color-tx-muted)',
+                    }}>
+                      {counts.total} metric{counts.total !== 1 ? 's' : ''}
+                    </span>
+                    {counts.flagged > 0 && (
+                      <span style={{
+                        fontSize: '10px', padding: '0.1rem 0.4rem', borderRadius: '4px',
+                        background: isActive ? 'rgba(255,255,255,0.3)' : 'var(--color-error)',
+                        color: '#fff',
+                      }}>
+                        {counts.flagged} ⚠
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <p style={{
+                  margin: 0, fontSize: 'var(--text-xs)', lineHeight: 1.5,
+                  color: isActive ? 'rgba(255,255,255,0.85)' : 'var(--color-tx-muted)',
+                }}>
+                  {group.description}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

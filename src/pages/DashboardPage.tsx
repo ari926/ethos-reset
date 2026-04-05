@@ -348,6 +348,15 @@ const HEALTH_CATEGORIES = [
   { key: 'infectious', label: 'Infectious', icon: Bug, keywords: ['lyme', 'babesia', 'bartonella', 'ehrlichia', 'anaplasma', 'strep', 'aso', 'anti-dnase'] },
 ] as const;
 
+interface CategoryMetricDetail {
+  name: string;
+  value: string;
+  unit: string | null;
+  status: string | null;
+  score: number;
+  date: string;
+}
+
 interface CategoryScore {
   key: string;
   label: string;
@@ -356,6 +365,7 @@ interface CategoryScore {
   grade: string;
   gradeColor: string;
   metricCount: number;
+  details: CategoryMetricDetail[];
 }
 
 function computeHealthScores(metrics: HealthMetric[]): CategoryScore[] {
@@ -380,13 +390,25 @@ function computeHealthScores(metrics: HealthMetric[]): CategoryScore[] {
 
     // Score each metric
     let totalScore = 0;
+    const details: CategoryMetricDetail[] = [];
     for (const m of matched) {
-      if (m.status === 'normal') totalScore += 100;
-      else if (m.status === 'low') totalScore += 40;
-      else if (m.status === 'high') totalScore += 40;
-      else if (m.status === 'critical') totalScore += 10;
-      else totalScore += 70; // null status
+      let metricScore = 70;
+      if (m.status === 'normal') metricScore = 100;
+      else if (m.status === 'low') metricScore = 40;
+      else if (m.status === 'high') metricScore = 40;
+      else if (m.status === 'critical') metricScore = 10;
+      totalScore += metricScore;
+      details.push({
+        name: m.metric_name,
+        value: String(m.metric_value),
+        unit: m.metric_unit,
+        status: m.status,
+        score: metricScore,
+        date: m.recorded_date,
+      });
     }
+    // Sort: worst scores first
+    details.sort((a, b) => a.score - b.score);
 
     const score = matched.length > 0 ? Math.round(totalScore / matched.length) : 0;
 
@@ -411,12 +433,14 @@ function computeHealthScores(metrics: HealthMetric[]): CategoryScore[] {
       grade,
       gradeColor,
       metricCount: matched.length,
+      details,
     };
   });
 }
 
 function HealthScoreSection({ metrics }: { metrics: HealthMetric[] }) {
   const scores = useMemo(() => computeHealthScores(metrics), [metrics]);
+  const [expandedCat, setExpandedCat] = useState<string | null>(null);
 
   if (metrics.length === 0) return null;
 
@@ -433,19 +457,28 @@ function HealthScoreSection({ metrics }: { metrics: HealthMetric[] }) {
       }}>
         {scores.map(s => {
           const Icon = s.icon;
+          const isExpanded = expandedCat === s.key;
           return (
             <div key={s.key} style={{
               background: 'var(--color-surface)',
               borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-divider)',
+              border: `1px solid ${isExpanded ? s.gradeColor : 'var(--color-divider)'}`,
               padding: '1rem',
               display: 'flex',
               flexDirection: 'column',
               gap: '0.5rem',
-            }}>
+              cursor: s.metricCount > 0 ? 'pointer' : 'default',
+              transition: 'border-color 0.15s',
+              gridColumn: isExpanded ? '1 / -1' : undefined,
+            }} onClick={() => s.metricCount > 0 && setExpandedCat(isExpanded ? null : s.key)}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Icon size={16} style={{ color: 'var(--color-tx-muted)' }} />
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)', fontWeight: 500 }}>{s.label}</span>
+                {s.metricCount > 0 && (
+                  <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--color-tx-faint)' }}>
+                    {isExpanded ? '▼' : 'tap for details'}
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
                 <span style={{ fontSize: '1.75rem', fontWeight: 700, color: s.gradeColor, lineHeight: 1 }}>{s.grade}</span>
@@ -456,6 +489,45 @@ function HealthScoreSection({ metrics }: { metrics: HealthMetric[] }) {
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-faint)' }}>
                 {s.metricCount > 0 ? `${s.metricCount} metric${s.metricCount === 1 ? '' : 's'}` : 'No data'}
               </span>
+
+              {/* Expanded detail view */}
+              {isExpanded && s.details.length > 0 && (
+                <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--color-divider)', paddingTop: '0.75rem' }}>
+                  {s.details.map((d, i) => (
+                    <div key={i} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '0.4rem 0', borderBottom: i < s.details.length - 1 ? '1px solid var(--color-divider)' : 'none',
+                      fontSize: 'var(--text-sm)',
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: 500 }}>{d.name}</span>
+                        <span style={{ color: 'var(--color-tx-faint)', fontSize: 'var(--text-xs)', marginLeft: '0.5rem' }}>{d.date}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>{d.value} {d.unit ?? ''}</span>
+                        <span style={{
+                          display: 'inline-block', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '10px', fontWeight: 600,
+                          background: d.status === 'critical' ? 'var(--color-error)' : d.status === 'high' || d.status === 'low' ? 'var(--color-warning)' : 'var(--color-success)',
+                          color: '#fff',
+                        }}>
+                          {d.status ?? 'normal'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)', marginTop: '0.5rem', lineHeight: 1.5 }}>
+                    {s.details.filter(d => d.status === 'critical').length > 0
+                      ? `⚠️ ${s.details.filter(d => d.status === 'critical').length} critical marker${s.details.filter(d => d.status === 'critical').length > 1 ? 's' : ''} need immediate attention. `
+                      : ''}
+                    {s.details.filter(d => d.status === 'high' || d.status === 'low').length > 0
+                      ? `${s.details.filter(d => d.status === 'high' || d.status === 'low').length} marker${s.details.filter(d => d.status === 'high' || d.status === 'low').length > 1 ? 's' : ''} out of range. `
+                      : ''}
+                    {s.details.filter(d => d.status === 'normal').length > 0
+                      ? `✓ ${s.details.filter(d => d.status === 'normal').length} marker${s.details.filter(d => d.status === 'normal').length > 1 ? 's' : ''} in healthy range.`
+                      : ''}
+                  </p>
+                </div>
+              )}
             </div>
           );
         })}
