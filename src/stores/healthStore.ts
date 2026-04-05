@@ -99,6 +99,22 @@ export interface DoctorAccess {
   member_id: string;
 }
 
+export interface Treatment {
+  id: string;
+  member_id: string;
+  name: string;
+  category: string | null;
+  dosage: string | null;
+  frequency: string | null;
+  start_date: string;
+  end_date: string | null;
+  prescriber: string | null;
+  reason: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export type RegionStatus = 'normal' | 'warning' | 'critical' | 'nodata';
 
 export interface HealthAlert {
@@ -123,8 +139,13 @@ interface HealthState {
   doctors: Doctor[];
   doctorAccess: DoctorAccess[];
   alerts: HealthAlert[];
+  treatments: Treatment[];
   loading: boolean;
 
+  loadTreatments: () => Promise<void>;
+  addTreatment: (t: Partial<Treatment>) => Promise<void>;
+  updateTreatment: (id: string, updates: Partial<Treatment>) => Promise<void>;
+  deleteTreatment: (id: string) => Promise<void>;
   loadDoctors: () => Promise<void>;
   addDoctor: (doctor: Partial<Doctor>) => Promise<void>;
   updateDoctor: (id: string, updates: Partial<Doctor>) => Promise<void>;
@@ -159,7 +180,53 @@ export const useHealthStore = create<HealthState>((set, get) => ({
   doctors: [],
   doctorAccess: [],
   alerts: [],
+  treatments: [],
   loading: false,
+
+  loadTreatments: async () => {
+    const memberId = get().activeMemberId;
+    if (!memberId) return;
+    const { data, error } = await supabase
+      .from('treatments')
+      .select('*')
+      .eq('member_id', memberId)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('Failed to load treatments:', error);
+      return;
+    }
+    set({ treatments: data ?? [] });
+  },
+
+  addTreatment: async (t: Partial<Treatment>) => {
+    const { error } = await supabase.from('treatments').insert(t);
+    if (error) {
+      toast.error('Failed to add treatment');
+      return;
+    }
+    toast.success('Treatment added');
+    get().loadTreatments();
+  },
+
+  updateTreatment: async (id: string, updates: Partial<Treatment>) => {
+    const { error } = await supabase.from('treatments').update(updates).eq('id', id);
+    if (error) {
+      toast.error('Failed to update treatment');
+      return;
+    }
+    toast.success('Treatment updated');
+    get().loadTreatments();
+  },
+
+  deleteTreatment: async (id: string) => {
+    const { error } = await supabase.from('treatments').delete().eq('id', id);
+    if (error) {
+      toast.error('Failed to delete treatment');
+      return;
+    }
+    toast.success('Treatment deleted');
+    get().loadTreatments();
+  },
 
   loadFamilyMembers: async () => {
     set({ loading: true });
@@ -245,6 +312,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
     set({ reports, restrictions, metrics, vitals });
     get().computeRegionHealth();
     get().computeAlerts();
+    get().loadTreatments();
   },
 
   addFamilyMember: async (member: Partial<FamilyMember>) => {

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useHealthStore } from '../stores/healthStore';
-import { Heart, FileText, ShieldAlert, Activity, Clock, Plus, TrendingUp, AlertTriangle, CheckCircle, ArrowUpRight, BarChart3 } from 'lucide-react';
+import type { HealthMetric } from '../stores/healthStore';
+import { Heart, FileText, ShieldAlert, Activity, Clock, Plus, TrendingUp, AlertTriangle, CheckCircle, ArrowUpRight, BarChart3, Zap, Shield, Brain, FlaskConical, Flame, Bug } from 'lucide-react';
 import { formatDate, calculateAge } from '../lib/utils';
 import Modal from '../components/common/Modal';
 import TrendChart from '../components/Dashboard/TrendChart';
@@ -244,6 +245,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* ── Health Score by System ── */}
+      <HealthScoreSection metrics={metrics} />
+
       {/* ── Executive Health Summary ── */}
       {concerns.length > 0 && (
         <div className="section" style={{ marginTop: '1.5rem' }}>
@@ -329,6 +333,133 @@ export default function DashboardPage() {
         memberId={activeMemberId}
         onSave={addVital}
       />
+    </div>
+  );
+}
+
+/* ── Health Score Section ── */
+
+const HEALTH_CATEGORIES = [
+  { key: 'cardiovascular', label: 'Cardiovascular', icon: Heart, keywords: ['ldl', 'apob', 'apolipoprotein', 'non-hdl', 'triglyceride', 'cholesterol', 'hdl'] },
+  { key: 'immune', label: 'Immune', icon: Shield, keywords: ['cd3', 'cd4', 'cd8', 'wbc', 'white blood', 'lymphocyte', 'neutrophil', 'igg', 'igm', 'iga'] },
+  { key: 'neurological', label: 'Neurological', icon: Brain, keywords: ['mri', 'neurofilament', 'b12', 'folate'] },
+  { key: 'gut', label: 'Gut', icon: FlaskConical, keywords: ['zonulin', 'h. pylori', 'candida', 'calprotectin', 'casein', "cow's milk"] },
+  { key: 'metabolic', label: 'Metabolic', icon: Flame, keywords: ['glucose', 'hba1c', 'insulin', 'testosterone', 'shbg', 'thyroid', 'tsh'] },
+  { key: 'infectious', label: 'Infectious', icon: Bug, keywords: ['lyme', 'babesia', 'bartonella', 'ehrlichia', 'anaplasma', 'strep', 'aso', 'anti-dnase'] },
+] as const;
+
+interface CategoryScore {
+  key: string;
+  label: string;
+  icon: typeof Heart;
+  score: number;
+  grade: string;
+  gradeColor: string;
+  metricCount: number;
+}
+
+function computeHealthScores(metrics: HealthMetric[]): CategoryScore[] {
+  // Get latest metrics by name
+  const latestByName = new Map<string, HealthMetric>();
+  for (const m of metrics) {
+    const existing = latestByName.get(m.metric_name);
+    if (!existing || m.recorded_date > existing.recorded_date) {
+      latestByName.set(m.metric_name, m);
+    }
+  }
+
+  return HEALTH_CATEGORIES.map(cat => {
+    // Find metrics matching this category
+    const matched: HealthMetric[] = [];
+    for (const [, m] of latestByName) {
+      const nameLower = m.metric_name.toLowerCase();
+      if (cat.keywords.some(kw => nameLower.includes(kw))) {
+        matched.push(m);
+      }
+    }
+
+    // Score each metric
+    let totalScore = 0;
+    for (const m of matched) {
+      if (m.status === 'normal') totalScore += 100;
+      else if (m.status === 'low') totalScore += 40;
+      else if (m.status === 'high') totalScore += 40;
+      else if (m.status === 'critical') totalScore += 10;
+      else totalScore += 70; // null status
+    }
+
+    const score = matched.length > 0 ? Math.round(totalScore / matched.length) : 0;
+
+    let grade: string;
+    let gradeColor: string;
+    if (score >= 90) { grade = 'A'; gradeColor = 'var(--color-success)'; }
+    else if (score >= 75) { grade = 'B'; gradeColor = 'var(--color-primary)'; }
+    else if (score >= 60) { grade = 'C'; gradeColor = 'var(--color-warning)'; }
+    else if (score >= 40) { grade = 'D'; gradeColor = 'var(--color-error)'; }
+    else { grade = 'F'; gradeColor = 'var(--color-error)'; }
+
+    if (matched.length === 0) {
+      grade = '--';
+      gradeColor = 'var(--color-tx-muted)';
+    }
+
+    return {
+      key: cat.key,
+      label: cat.label,
+      icon: cat.icon,
+      score,
+      grade,
+      gradeColor,
+      metricCount: matched.length,
+    };
+  });
+}
+
+function HealthScoreSection({ metrics }: { metrics: HealthMetric[] }) {
+  const scores = useMemo(() => computeHealthScores(metrics), [metrics]);
+
+  if (metrics.length === 0) return null;
+
+  return (
+    <div className="section" style={{ marginTop: '1.5rem' }}>
+      <h2 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <Zap size={16} style={{ color: 'var(--color-primary)' }} />
+        Health Score by System
+      </h2>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+        gap: '0.75rem',
+      }}>
+        {scores.map(s => {
+          const Icon = s.icon;
+          return (
+            <div key={s.key} style={{
+              background: 'var(--color-surface)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-divider)',
+              padding: '1rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Icon size={16} style={{ color: 'var(--color-tx-muted)' }} />
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)', fontWeight: 500 }}>{s.label}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+                <span style={{ fontSize: '1.75rem', fontWeight: 700, color: s.gradeColor, lineHeight: 1 }}>{s.grade}</span>
+                {s.metricCount > 0 && (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-muted)' }}>{s.score}%</span>
+                )}
+              </div>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-tx-faint)' }}>
+                {s.metricCount > 0 ? `${s.metricCount} metric${s.metricCount === 1 ? '' : 's'}` : 'No data'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -17,6 +17,8 @@ const primaryNav = [
 
 const moreNav = [
   { to: '/doctors', label: 'My Doctors' },
+  { to: '/trends', label: 'Biomarker Trends' },
+  { to: '/treatments', label: 'Treatments' },
   { to: '/reports', label: 'Reports' },
   { to: '/restrictions', label: 'Restrictions' },
   { to: '/body', label: '3D Body' },

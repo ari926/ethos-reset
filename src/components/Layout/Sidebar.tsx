@@ -7,6 +7,8 @@ import {
   Camera,
   Watch,
   MessageCircle,
+  TrendingUp,
+  Pill,
   Stethoscope,
   Users,
   LogOut,
@@ -24,6 +26,8 @@ const navItems = [
   { to: '/scanner', icon: Camera, label: 'Scanner' },
   { to: '/wearables', icon: Watch, label: 'Wearables' },
   { to: '/doctor-ai', icon: MessageCircle, label: 'Doctor AI' },
+  { to: '/trends', icon: TrendingUp, label: 'Trends' },
+  { to: '/treatments', icon: Pill, label: 'Treatments' },
   { to: '/doctors', icon: Stethoscope, label: 'Doctors' },
   { to: '/family', icon: Users, label: 'Family' },
 ];

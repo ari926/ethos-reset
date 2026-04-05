@@ -13,6 +13,8 @@ import ScannerPage from './pages/ScannerPage';
 import WearablesPage from './pages/WearablesPage';
 import ChatPage from './pages/ChatPage';
 import DoctorsPage from './pages/DoctorsPage';
+import TrendsPage from './pages/TrendsPage';
+import TreatmentsPage from './pages/TreatmentsPage';
 import FamilyPage from './pages/FamilyPage';
 import InvitePage from './pages/InvitePage';
 import DoctorSharePage from './pages/DoctorSharePage';
@@ -74,6 +76,8 @@ export default function App() {
                 <Route path="/scanner" element={<ScannerPage />} />
                 <Route path="/wearables" element={<WearablesPage />} />
                 <Route path="/doctor-ai" element={<ChatPage />} />
+                <Route path="/trends" element={<TrendsPage />} />
+                <Route path="/treatments" element={<TreatmentsPage />} />
                 <Route path="/doctors" element={<DoctorsPage />} />
                 <Route path="/family" element={<FamilyPage />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
