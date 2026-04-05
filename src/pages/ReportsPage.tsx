@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { useHealthStore, type HealthReport } from '../stores/healthStore';
 import { FileText, Upload, Trash2, Eye, X, Calendar, ChevronDown, ChevronRight, Beaker, ArrowLeft, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendsContent } from './TrendsPage';
 import { formatDate } from '../lib/utils';
 import Modal from '../components/common/Modal';
 import ConfirmDialog from '../components/common/ConfirmDialog';
@@ -604,7 +605,7 @@ function LabExplorer() {
   );
 }
 
-type ReportsTab = 'documents' | 'labs';
+type ReportsTab = 'trends' | 'labs' | 'documents';
 
 export default function ReportsPage() {
   const { reports, activeMemberId, familyMembers, uploadReport, deleteReport, processReport } = useHealthStore();
@@ -616,7 +617,7 @@ export default function ReportsPage() {
   // All years collapsed by default except the current year
   const currentYear = new Date().getFullYear().toString();
   const [collapsedYears, setCollapsedYears] = useState<Set<string> | null>(null);
-  const [activeTab, setActiveTab] = useState<ReportsTab>('labs');
+  const [activeTab, setActiveTab] = useState<ReportsTab>('trends');
 
   const filtered = filterType === 'all' ? reports : reports.filter(r => r.report_type === filterType);
 
@@ -686,6 +687,13 @@ export default function ReportsPage() {
       {/* Tab Bar */}
       <div className="reports-tab-bar">
         <button
+          className={`reports-tab${activeTab === 'trends' ? ' active' : ''}`}
+          onClick={() => setActiveTab('trends')}
+        >
+          <TrendingUp size={15} />
+          <span>Trends</span>
+        </button>
+        <button
           className={`reports-tab${activeTab === 'documents' ? ' active' : ''}`}
           onClick={() => setActiveTab('documents')}
         >
@@ -702,7 +710,9 @@ export default function ReportsPage() {
         </button>
       </div>
 
-      {activeTab === 'labs' ? (
+      {activeTab === 'trends' ? (
+        <TrendsContent />
+      ) : activeTab === 'labs' ? (
         <LabExplorer />
       ) : (
       <>

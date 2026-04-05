@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useHealthStore } from '../stores/healthStore';
+import { HEALTH_AI_URL } from '../lib/supabase';
 
 const PALETTE = ['#2dd4bf', '#818cf8', '#f472b6', '#fb923c', '#34d399'];
 
@@ -109,6 +110,20 @@ interface MetricGroup {
 const PADDING = { top: 28, right: 24, bottom: 48, left: 56 };
 
 export default function TrendsPage() {
+  return (
+    <div>
+      <div className="view-header">
+        <div>
+          <h1 className="view-title">Biomarker Trends</h1>
+          <p className="view-subtitle">Compare multiple metrics over time</p>
+        </div>
+      </div>
+      <TrendsContent />
+    </div>
+  );
+}
+
+export function TrendsContent() {
   const metrics = useHealthStore(s => s.metrics);
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState('');
@@ -342,12 +357,12 @@ export default function TrendsPage() {
     for (let i = 0; i < allDates.length; i += step) {
       const x = toCanvasX(i);
       const d = new Date(allDates[i]);
-      ctx.fillText(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), x, size.h - PADDING.bottom + 18);
+      ctx.fillText(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), x, size.h - PADDING.bottom + 18);
     }
     if ((allDates.length - 1) % step !== 0 && allDates.length > 1) {
       const x = toCanvasX(allDates.length - 1);
       const d = new Date(allDates[allDates.length - 1]);
-      ctx.fillText(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), x, size.h - PADDING.bottom + 18);
+      ctx.fillText(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), x, size.h - PADDING.bottom + 18);
     }
 
     // Reference range for first metric (dashed lines)
@@ -470,15 +485,49 @@ export default function TrendsPage() {
     }
   }, [allDates, chartData, toCanvasX]);
 
+  // AI Analysis state
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+
+  useEffect(() => {
+    if (!activeInsight || selected.length === 0) {
+      setAiAnalysis(null);
+      return;
+    }
+    generateAnalysis();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeGroup, selected.join(',')]);
+
+  const generateAnalysis = async () => {
+    setLoadingAnalysis(true);
+    try {
+      const contextLines = selected.map(name => {
+        const data = groupedMetrics.get(name);
+        if (!data) return '';
+        const sorted = [...data.points].sort((a, b) => b.date.localeCompare(a.date));
+        const latest = sorted[0];
+        return `${name}: latest ${latest?.value} ${data.unit} (${data.status ?? 'normal'}) on ${latest?.date}${data.refLow != null ? `, ref range: ${data.refLow}-${data.refHigh}` : ''}`;
+      }).filter(Boolean).join('\n');
+
+      const res = await fetch(HEALTH_AI_URL ?? '', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: `Analyze these biomarkers for a patient. For each one, briefly explain what it measures (1 sentence). Then explain how they relate to each other as a group. Finally, state what looks good and what needs attention based on the values.\n\nMetrics:\n${contextLines}` }],
+          model: 'claude',
+          healthContext: '',
+        }),
+      });
+      const data = await res.json();
+      setAiAnalysis(data.response ?? null);
+    } catch {
+      setAiAnalysis(null);
+    }
+    setLoadingAnalysis(false);
+  };
+
   return (
     <div>
-      <div className="view-header">
-        <div>
-          <h1 className="view-title">Biomarker Trends</h1>
-          <p className="view-subtitle">Compare multiple metrics over time</p>
-        </div>
-      </div>
-
       {/* Insight description for active group */}
       {activeInsight && selected.length > 0 && (
         <div style={{
@@ -642,6 +691,39 @@ export default function TrendsPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* AI Analysis */}
+      {loadingAnalysis && (
+        <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--color-tx-muted)', fontSize: 'var(--text-sm)' }}>
+          Analyzing biomarkers...
+        </div>
+      )}
+      {aiAnalysis && !loadingAnalysis && (
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-divider)',
+          borderRadius: 'var(--radius-md)',
+          padding: '1rem',
+          marginTop: '1rem',
+          fontSize: 'var(--text-sm)',
+          lineHeight: 1.7,
+          color: 'var(--color-tx)',
+        }}>
+          <h4 style={{ margin: '0 0 0.5rem', fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-primary)' }}>
+            AI Analysis — {activeInsight?.name}
+          </h4>
+          {aiAnalysis.split('\n').map((line, i) => {
+            if (line.startsWith('**') && line.endsWith('**')) {
+              return <h5 key={i} style={{ margin: '0.75rem 0 0.25rem', fontWeight: 600, fontSize: 'var(--text-sm)' }}>{line.replace(/\*\*/g, '')}</h5>;
+            }
+            if (line.startsWith('- ') || line.startsWith('• ')) {
+              return <div key={i} style={{ paddingLeft: '1rem', marginBottom: '0.2rem' }}>• {line.replace(/^[-•]\s*/, '').replace(/\*\*/g, '')}</div>;
+            }
+            if (line.trim() === '') return <div key={i} style={{ height: '0.35rem' }} />;
+            return <p key={i} style={{ margin: '0.15rem 0' }}>{line.replace(/\*\*/g, '')}</p>;
+          })}
         </div>
       )}
 
