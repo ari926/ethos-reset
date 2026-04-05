@@ -107,7 +107,7 @@ interface MetricGroup {
   refHigh: number | null;
 }
 
-const PADDING = { top: 28, right: 24, bottom: 48, left: 56 };
+const PADDING = { top: 28, right: 60, bottom: 52, left: 64 };
 
 export default function TrendsPage() {
   return (
@@ -357,12 +357,12 @@ export function TrendsContent() {
     for (let i = 0; i < allDates.length; i += step) {
       const x = toCanvasX(i);
       const d = new Date(allDates[i]);
-      ctx.fillText(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), x, size.h - PADDING.bottom + 18);
+      ctx.fillText(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }), x, size.h - PADDING.bottom + 18);
     }
     if ((allDates.length - 1) % step !== 0 && allDates.length > 1) {
       const x = toCanvasX(allDates.length - 1);
       const d = new Date(allDates[allDates.length - 1]);
-      ctx.fillText(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), x, size.h - PADDING.bottom + 18);
+      ctx.fillText(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }), x, size.h - PADDING.bottom + 18);
     }
 
     // Reference range for first metric (dashed lines)
@@ -433,15 +433,72 @@ export function TrendsContent() {
       }
     }
 
-    // Y-axis label
-    ctx.save();
-    ctx.translate(12, PADDING.top + plotH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = colorTxFaint;
-    ctx.font = '500 10px Inter, system-ui, sans-serif';
-    ctx.fillText(chartData.length === 1 ? chartData[0].unit : 'Normalized', 0, 0);
-    ctx.restore();
+    // Y-axis value labels per metric
+    ctx.font = '500 9px Inter, system-ui, sans-serif';
+    if (chartData.length === 1) {
+      // Single metric: show actual values on left Y-axis
+      const group = chartData[0];
+      const allVals = group.points.map(p => p.value);
+      if (group.refLow != null) allVals.push(group.refLow);
+      if (group.refHigh != null) allVals.push(group.refHigh);
+      const minVal = Math.min(...allVals);
+      const maxVal = Math.max(...allVals);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = colorTxMuted;
+      for (let i = 0; i <= 4; i++) {
+        const val = maxVal - (i / 4) * (maxVal - minVal);
+        const y = PADDING.top + (i / 4) * plotH;
+        ctx.fillText(`${Math.round(val * 10) / 10} ${group.unit}`, PADDING.left - 6, y + 3);
+      }
+    } else {
+      // Multiple metrics: show min/max for each on left + right sides
+      for (let gi = 0; gi < Math.min(chartData.length, 2); gi++) {
+        const group = chartData[gi];
+        const color = PALETTE[gi % PALETTE.length];
+        const allVals = group.points.map(p => p.value);
+        if (group.refLow != null) allVals.push(group.refLow);
+        if (group.refHigh != null) allVals.push(group.refHigh);
+        const minVal = Math.min(...allVals);
+        const maxVal = Math.max(...allVals);
+
+        ctx.fillStyle = color;
+        if (gi === 0) {
+          // Left side
+          ctx.textAlign = 'right';
+          ctx.fillText(`${Math.round(maxVal * 10) / 10}`, PADDING.left - 6, PADDING.top + 3);
+          ctx.fillText(`${Math.round(minVal * 10) / 10}`, PADDING.left - 6, PADDING.top + plotH + 3);
+          ctx.fillText(group.unit, PADDING.left - 6, PADDING.top + plotH / 2 + 3);
+        } else {
+          // Right side
+          ctx.textAlign = 'left';
+          const rx = PADDING.left + plotW + 6;
+          ctx.fillText(`${Math.round(maxVal * 10) / 10}`, rx, PADDING.top + 3);
+          ctx.fillText(`${Math.round(minVal * 10) / 10}`, rx, PADDING.top + plotH + 3);
+          ctx.fillText(group.unit, rx, PADDING.top + plotH / 2 + 3);
+        }
+      }
+
+      // If 3+ metrics, show a note
+      if (chartData.length > 2) {
+        ctx.fillStyle = colorTxFaint;
+        ctx.textAlign = 'left';
+        ctx.font = '400 8px Inter, system-ui, sans-serif';
+        ctx.fillText(`+${chartData.length - 2} more (hover for values)`, PADDING.left + plotW + 6, PADDING.top + plotH - 10);
+      }
+    }
+
+    // Reference range labels
+    if (chartData[0]?.refLow != null && chartData[0]?.refHigh != null) {
+      ctx.font = '500 9px Inter, system-ui, sans-serif';
+      ctx.fillStyle = colorSuccess;
+      ctx.textAlign = 'right';
+      const normLow = normalize(chartData[0].refLow, chartData[0]);
+      const normHigh = normalize(chartData[0].refHigh, chartData[0]);
+      const yRefLow = toCanvasY(normLow);
+      const yRefHigh = toCanvasY(normHigh);
+      ctx.fillText(`ref: ${chartData[0].refHigh}`, PADDING.left - 6, yRefHigh - 4);
+      ctx.fillText(`ref: ${chartData[0].refLow}`, PADDING.left - 6, yRefLow + 12);
+    }
   }, [chartData, allDates, size, toCanvasX, toCanvasY, normalize]);
 
   // Mouse tooltip
