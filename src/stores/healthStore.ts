@@ -780,7 +780,8 @@ export async function analyzeScanImage(
   mimeType: string,
   scanType: string,
   _memberId: string,
-  restrictions: Array<{ item_name: string; severity: string; restriction_type: string; reaction?: string | null }>
+  restrictions: Array<{ item_name: string; severity: string; restriction_type: string; reaction?: string | null }>,
+  fullHealthContext?: string
 ): Promise<ScanResult | null> {
   try {
     const res = await fetch(HEALTH_AI_URL, {
@@ -792,6 +793,7 @@ export async function analyzeScanImage(
         mime_type: mimeType,
         scan_type: scanType,
         restrictions,
+        health_context: fullHealthContext ?? '',
       }),
     });
     if (!res.ok) return null;

@@ -546,6 +546,7 @@ Respond with valid JSON only — no markdown:
       if ('action' in body && body.action === 'scan') {
         const scanBody = body as ScanRequestBody;
         const { image_base64, mime_type, scan_type, restrictions } = scanBody;
+        const healthContext = (body as any).health_context ?? '';
 
         if (!image_base64) {
           return new Response(JSON.stringify({ error: 'Missing image_base64' }), {
@@ -558,48 +559,67 @@ Respond with valid JSON only — no markdown:
           ? restrictions.map(r => `- ${r.item_name} (${r.restriction_type}, ${r.severity}${r.reaction ? ', reaction: ' + r.reaction : ''})`).join('\n')
           : 'No known restrictions on file.';
 
+        const healthDataSection = healthContext
+          ? `\n\nCOMPREHENSIVE PATIENT HEALTH DATA (use ALL of this to evaluate safety):\n${healthContext}`
+          : '';
+
         const scanSystemPrompt = scan_type === 'medicine'
-          ? `You are a medication safety checker. The user will show you an image of a medication (pill bottle, box, prescription label, etc.).
+          ? `You are an expert medication safety system with access to this patient's complete health profile. You must be THOROUGH — check everything.
 
 Your job:
-1. Identify the medication from the image (name, dosage, form)
-2. List the active ingredients and common inactive ingredients
-3. Check against the patient's known restrictions/allergies listed below
-4. Flag any dangerous interactions, contraindications, or allergens
+1. Identify the medication from the image (name, active ingredient, dosage, form)
+2. List ALL active and inactive ingredients
+3. Cross-reference against EVERY data point below:
+   - Known allergies and restrictions
+   - Genetic drug metabolism variants (CYP450 enzymes) — flag if patient is a poor/rapid metabolizer for this drug's pathway
+   - Current medications and supplements — check for drug-drug interactions
+   - Active infections — check if this medication could worsen infections or interfere with treatment
+   - Liver function — flag if liver markers are elevated and drug is hepatotoxic
+   - Kidney function — flag if kidney markers are abnormal and drug is nephrotoxic
+   - Gut health — flag if medication could worsen gut permeability issues
+4. Flag EVERYTHING that could be a concern, even minor interactions
 
 PATIENT RESTRICTIONS:
 ${restrictionList}
+${healthDataSection}
 
-Respond with valid JSON only — no markdown, no explanation outside the JSON:
+Respond with valid JSON only:
 {
   "item_name": "Name of the medication",
   "overall_result": "safe" | "unsafe" | "caution",
   "ingredients": ["list", "of", "key", "ingredients"],
   "flagged": [
-    { "ingredient": "flagged ingredient", "severity": "critical|warning", "reason": "why it's flagged" }
+    { "ingredient": "flagged ingredient or interaction", "severity": "critical|warning", "reason": "detailed explanation of why this is flagged for THIS specific patient" }
   ],
-  "explanation": "1-3 sentence plain English summary of whether this medication is safe for this patient and why"
+  "explanation": "2-4 sentence plain English summary covering: is it safe, any genetic metabolism concerns, any drug interactions with current meds, any organ function concerns"
 }`
-          : `You are a food safety checker. The user will show you an image of food (a dish, packaged food, ingredients, menu item, etc.).
+          : `You are an expert food safety system with access to this patient's complete health profile including lab-tested food sensitivities, genetics, active infections, and current medications. You must be THOROUGH.
 
 Your job:
-1. Identify what the food is from the image
-2. List the likely ingredients (be thorough — include hidden allergens like dairy in sauces, gluten in breadings, nuts in garnishes)
-3. Check against the patient's known food restrictions/allergies/sensitivities listed below
-4. Flag any ingredients that match restrictions
+1. Identify the food from the image
+2. List ALL likely ingredients (be thorough — hidden dairy in sauces, gluten in breadings, soy in dressings, nuts in garnishes, etc.)
+3. Cross-reference against EVERY data point below:
+   - Known food allergies and restrictions
+   - P88/IgG food sensitivity test results — if any ingredient matches a HIGH or MODERATE reactivity food, FLAG IT
+   - Active infections — some foods feed certain infections (sugar feeds Candida, etc.)
+   - Current medications — check for food-drug interactions (grapefruit + statins, vitamin K + blood thinners, etc.)
+   - Gut health — if patient has leaky gut (high Zonulin), flag inflammatory foods
+   - Genetic variants — if MTHFR variant, flag foods with folic acid (vs methylfolate)
+4. Flag EVERYTHING — even minor sensitivities. The patient wants to know.
 
 PATIENT RESTRICTIONS:
 ${restrictionList}
+${healthDataSection}
 
-Respond with valid JSON only — no markdown, no explanation outside the JSON:
+Respond with valid JSON only:
 {
   "item_name": "Name of the food/dish",
   "overall_result": "safe" | "unsafe" | "caution",
   "ingredients": ["list", "of", "likely", "ingredients"],
   "flagged": [
-    { "ingredient": "flagged ingredient", "severity": "critical|warning", "reason": "why it's flagged based on patient restrictions" }
+    { "ingredient": "flagged ingredient", "severity": "critical|warning", "reason": "specific reason for THIS patient — reference their actual lab values, sensitivities, or medications" }
   ],
-  "explanation": "1-3 sentence plain English summary of whether this food is safe for this patient and why"
+  "explanation": "2-4 sentence plain English summary covering: is it safe, any food sensitivity matches from their P88 test, any infection or medication interactions"
 }`;
 
         // Use GPT-4o for vision (great at image analysis)
@@ -619,7 +639,7 @@ Respond with valid JSON only — no markdown, no explanation outside the JSON:
           },
           body: JSON.stringify({
             model: 'gpt-4o',
-            max_tokens: 1024,
+            max_tokens: 2048,
             response_format: { type: 'json_object' },
             messages: [
               { role: 'system', content: scanSystemPrompt },

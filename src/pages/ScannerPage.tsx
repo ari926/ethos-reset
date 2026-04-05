@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Camera, SwitchCamera, Utensils, Pill, Clock, CheckCircle, AlertTriangle, AlertOctagon } from 'lucide-react';
 import { useHealthStore, analyzeScanImage, type ScanResult } from '../stores/healthStore';
 import { supabase } from '../lib/supabase';
+import type { HealthMetric, Treatment } from '../stores/healthStore';
 
 type ScanType = 'food' | 'medicine';
 
@@ -18,7 +19,7 @@ interface ScanHistoryItem {
 }
 
 export default function ScannerPage() {
-  const { activeMemberId, familyMembers, restrictions } = useHealthStore();
+  const { activeMemberId, familyMembers, restrictions, metrics, treatments } = useHealthStore();
   const member = familyMembers.find(m => m.id === activeMemberId);
   const [scanType, setScanType] = useState<ScanType>('food');
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -31,6 +32,96 @@ export default function ScannerPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const confirmedRestrictions = restrictions.filter(r => r.confirmed);
+
+  // Build comprehensive health context for thorough safety checking
+  const fullHealthContext = useMemo(() => {
+    const lines: string[] = [];
+
+    // 1. Food sensitivities from P88 / IgG data
+    const foodSensitivities = metrics.filter((m: HealthMetric) => {
+      const src = (m.source ?? '').toLowerCase();
+      const unit = (m.metric_unit ?? '').toLowerCase();
+      const region = (m.body_region ?? '').toLowerCase();
+      return src.includes('p88') || src.includes('antigen') || src.includes('food') || unit.includes('u/ml') || region === 'immune';
+    });
+    if (foodSensitivities.length > 0) {
+      const highFoods = foodSensitivities.filter((m: HealthMetric) => Number(m.metric_value) >= 25);
+      const modFoods = foodSensitivities.filter((m: HealthMetric) => Number(m.metric_value) >= 15 && Number(m.metric_value) < 25);
+      if (highFoods.length > 0) {
+        lines.push(`HIGH REACTIVITY FOODS (IgG ≥25 U/mL — immune system actively reacting): ${highFoods.map((m: HealthMetric) => `${m.metric_name} (${m.metric_value} U/mL)`).join(', ')}`);
+      }
+      if (modFoods.length > 0) {
+        lines.push(`MODERATE REACTIVITY FOODS (IgG 15-25 U/mL): ${modFoods.map((m: HealthMetric) => `${m.metric_name} (${m.metric_value} U/mL)`).join(', ')}`);
+      }
+    }
+
+    // 2. Genetic drug metabolism variants
+    const geneticMetrics = metrics.filter((m: HealthMetric) => {
+      const src = (m.source ?? '').toLowerCase();
+      const region = (m.body_region ?? '').toLowerCase();
+      return src.includes('3x4') || src.includes('genetic') || src.includes('pharmaco') || region === 'genetic';
+    });
+    if (geneticMetrics.length > 0) {
+      const drugMetabolism = geneticMetrics.filter((m: HealthMetric) => {
+        const name = m.metric_name.toLowerCase();
+        return /cyp|nat2|ugt|sult|dpyd|slco|abcb|vkorc/i.test(name);
+      });
+      if (drugMetabolism.length > 0) {
+        lines.push(`GENETIC DRUG METABOLISM VARIANTS (affects how body processes medications): ${drugMetabolism.map((m: HealthMetric) => `${m.metric_name}: ${m.metric_unit ?? ''} (${m.status ?? 'unknown'})`).join(', ')}`);
+      }
+      const methylation = geneticMetrics.filter((m: HealthMetric) => {
+        const name = m.metric_name.toLowerCase();
+        return /mthfr|comt|cbs|mtr|bhmt/i.test(name);
+      });
+      if (methylation.length > 0) {
+        lines.push(`METHYLATION VARIANTS (affects B vitamin and folate processing): ${methylation.map((m: HealthMetric) => `${m.metric_name}: ${m.metric_unit ?? ''} (${m.status ?? 'unknown'})`).join(', ')}`);
+      }
+    }
+
+    // 3. Active infections
+    const infectionMetrics = metrics.filter((m: HealthMetric) => {
+      const name = m.metric_name.toLowerCase();
+      return (name.includes('babesia') || name.includes('bartonella') || name.includes('lyme') ||
+              name.includes('borrelia') || name.includes('ehrlichia') || name.includes('anaplasma') ||
+              name.includes('strep') || name.includes('aso') || name.includes('anti-dnase')) &&
+             (m.status === 'high' || m.status === 'critical');
+    });
+    if (infectionMetrics.length > 0) {
+      lines.push(`ACTIVE/ELEVATED INFECTION MARKERS: ${infectionMetrics.map((m: HealthMetric) => `${m.metric_name}: ${m.metric_value} ${m.metric_unit ?? ''} (${m.status})`).join(', ')}`);
+    }
+
+    // 4. Current treatments (drug-drug and drug-food interactions)
+    const activeTreatments = (treatments ?? []).filter((t: Treatment) => t.is_active);
+    if (activeTreatments.length > 0) {
+      lines.push(`CURRENT MEDICATIONS & SUPPLEMENTS (check for interactions): ${activeTreatments.map((t: Treatment) => `${t.name}${t.dosage ? ' ' + t.dosage : ''}${t.frequency ? ' ' + t.frequency : ''}`).join(', ')}`);
+    }
+
+    // 5. Flagged metabolic/organ markers
+    const flaggedMetrics = metrics.filter((m: HealthMetric) => (m.status === 'high' || m.status === 'critical' || m.status === 'low'));
+    const liverIssues = flaggedMetrics.filter((m: HealthMetric) => (m.body_region ?? '').toLowerCase() === 'liver');
+    const kidneyIssues = flaggedMetrics.filter((m: HealthMetric) => (m.body_region ?? '').toLowerCase() === 'kidneys');
+    const gutIssues = flaggedMetrics.filter((m: HealthMetric) => {
+      const name = m.metric_name.toLowerCase();
+      return name.includes('zonulin') || (m.body_region ?? '').toLowerCase() === 'stomach' || (m.body_region ?? '').toLowerCase() === 'abdomen';
+    });
+
+    if (liverIssues.length > 0) {
+      lines.push(`LIVER FUNCTION CONCERNS: ${liverIssues.map((m: HealthMetric) => `${m.metric_name}: ${m.metric_value} ${m.metric_unit ?? ''} (${m.status})`).join(', ')}`);
+    }
+    if (kidneyIssues.length > 0) {
+      lines.push(`KIDNEY FUNCTION CONCERNS: ${kidneyIssues.map((m: HealthMetric) => `${m.metric_name}: ${m.metric_value} ${m.metric_unit ?? ''} (${m.status})`).join(', ')}`);
+    }
+    if (gutIssues.length > 0) {
+      lines.push(`GUT HEALTH CONCERNS: ${gutIssues.map((m: HealthMetric) => `${m.metric_name}: ${m.metric_value} ${m.metric_unit ?? ''} (${m.status})`).join(', ')}`);
+    }
+
+    // 6. Manual restrictions/allergies
+    if (confirmedRestrictions.length > 0) {
+      lines.push(`CONFIRMED ALLERGIES & RESTRICTIONS: ${confirmedRestrictions.map(r => `${r.item_name} (${r.restriction_type}, ${r.severity}${r.reaction ? ', reaction: ' + r.reaction : ''})`).join(', ')}`);
+    }
+
+    return lines.join('\n\n');
+  }, [metrics, treatments, confirmedRestrictions]);
 
   // Load scan history
   useEffect(() => {
@@ -78,7 +169,8 @@ export default function ScannerPage() {
         severity: r.severity,
         restriction_type: r.restriction_type,
         reaction: r.reaction,
-      }))
+      })),
+      fullHealthContext
     );
 
     const finalResult = scanResult ?? {
