@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { useHealthStore, type RegionStatus } from '../../stores/healthStore';
 import { formatDate } from '../../lib/utils';
@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-type LayerMode = 'skin' | 'muscles' | 'bones' | 'all';
+type LayerMode = 'skin' | 'muscles' | 'bones' | 'all' | 'xray';
 
 /* ── Health region bounding boxes (normalized Y 0–1) ── */
 const HEALTH_REGIONS: Record<string, { yMin: number; yMax: number }> = {
@@ -143,6 +143,20 @@ function AnatomyModel({
       } else if (layer === 'bones') {
         mesh.visible = mesh.userData.isBone;
         mesh.material = (origMat as THREE.MeshStandardMaterial).clone();
+      } else if (layer === 'xray') {
+        mesh.visible = true;
+        const xrayMat = (origMat as THREE.MeshStandardMaterial).clone();
+        if (!mesh.userData.isBone && !mesh.userData.isMuscle) {
+          xrayMat.opacity = 0.12;
+          xrayMat.color = new THREE.Color('#4488cc');
+          xrayMat.emissive = new THREE.Color('#1a3355');
+          xrayMat.emissiveIntensity = 0.15;
+        } else {
+          xrayMat.opacity = 0.85;
+        }
+        xrayMat.transparent = true;
+        xrayMat.depthWrite = false;
+        mesh.material = xrayMat;
       } else {
         mesh.visible = true;
         mesh.material = (origMat as THREE.MeshStandardMaterial).clone();
@@ -153,8 +167,8 @@ function AnatomyModel({
       const mat = mesh.material as THREE.MeshStandardMaterial;
       mat.transparent = true;
 
-      // Apply opacity (unless skin mode which already set it)
-      if (layer !== 'skin') {
+      // Apply opacity (unless skin/xray mode which already set it)
+      if (layer !== 'skin' && layer !== 'xray') {
         mat.opacity = (selectedPart && partName === selectedPart) ? 1 : opacity;
         mat.depthWrite = mat.opacity > 0.6;
       }
@@ -208,6 +222,38 @@ function AnatomyModel({
     setHovered(null);
     document.body.style.cursor = 'auto';
   }, []);
+
+  // Pulsing glow for critical/warning regions
+  const pulseRef = useRef(0);
+  useFrame((_, delta) => {
+    pulseRef.current += delta * 2;
+    if (!model) return;
+    const { min: boundsMin, max: boundsMax } = modelBounds.current;
+    const boundsHeight = boundsMax - boundsMin;
+
+    model.traverse((child) => {
+      if (!(child as THREE.Mesh).isMesh) return;
+      const mesh = child as THREE.Mesh;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (!mat || !mat.emissive) return;
+
+      const worldPos = new THREE.Vector3();
+      mesh.getWorldPosition(worldPos);
+      const normalizedY = boundsHeight > 0 ? (worldPos.y - boundsMin) / boundsHeight : 0.5;
+
+      for (const [regionName, bounds] of Object.entries(HEALTH_REGIONS)) {
+        if (normalizedY >= bounds.yMin && normalizedY <= bounds.yMax) {
+          const status = healthRegions[regionName];
+          if (status === 'critical') {
+            mat.emissiveIntensity = 0.3 + Math.sin(pulseRef.current * 3) * 0.2;
+          } else if (status === 'warning') {
+            mat.emissiveIntensity = 0.2 + Math.sin(pulseRef.current * 2) * 0.1;
+          }
+          break;
+        }
+      }
+    });
+  });
 
   if (!model) return null;
 
@@ -277,6 +323,19 @@ export default function BodyVisualization() {
     return map;
   }, [metrics, regionHealthMap]);
 
+  // Inline CSS for pulse animation
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes pulse-label {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.05); }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
+
   return (
     <div className="body-view">
       <div className="body-canvas">
@@ -318,6 +377,39 @@ export default function BodyVisualization() {
           </div>
         )}
 
+        {/* Floating metric labels */}
+        {!loading && !selectedPart && (
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+            {Object.entries(regionHealthMap).filter(([, status]) => status === 'critical' || status === 'warning').map(([region, status]) => {
+              const regionMetrics = metrics.filter(m => m.body_region === region && (m.status === 'critical' || m.status === 'high' || m.status === 'low'));
+              if (regionMetrics.length === 0) return null;
+              const topMetric = regionMetrics[0];
+              const bounds = HEALTH_REGIONS[region];
+              if (!bounds) return null;
+              const yPercent = 100 - ((bounds.yMin + bounds.yMax) / 2) * 80 - 5;
+              const xOffset = region.includes('left') ? '15%' : region.includes('right') ? '65%' : '60%';
+              return (
+                <div key={region} style={{
+                  position: 'absolute',
+                  top: `${yPercent}%`,
+                  left: xOffset,
+                  background: status === 'critical' ? 'rgba(239,68,68,0.9)' : 'rgba(245,158,11,0.9)',
+                  color: '#fff',
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: '4px',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                  animation: status === 'critical' ? 'pulse-label 2s infinite' : undefined,
+                }}>
+                  {topMetric.metric_name}: {topMetric.metric_value} {topMetric.metric_unit ?? ''}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Layer Tabs */}
         <div style={{
           position: 'absolute', top: '1rem', left: '50%', transform: 'translateX(-50%)',
@@ -329,6 +421,7 @@ export default function BodyVisualization() {
           <LayerTab label="Muscles" active={layer === 'muscles'} onClick={() => setLayer('muscles')} />
           <LayerTab label="Bones" active={layer === 'bones'} onClick={() => setLayer('bones')} />
           <LayerTab label="All" active={layer === 'all'} onClick={() => setLayer('all')} />
+          <LayerTab label="X-Ray" active={layer === 'xray'} onClick={() => setLayer('xray')} />
         </div>
 
         {/* Opacity Slider */}
