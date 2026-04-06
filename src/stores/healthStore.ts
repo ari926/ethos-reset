@@ -475,8 +475,9 @@ export const useHealthStore = create<HealthState>((set, get) => ({
   },
 
   addDoctor: async (doctor: Partial<Doctor>) => {
-    // Ensure 'name' column is populated (legacy NOT NULL column)
-    const insertData = { ...doctor, name: doctor.full_name ?? doctor.email ?? '' };
+    // Ensure 'name' column is populated + set invited_by for RLS
+    const { data: { session } } = await supabase.auth.getSession();
+    const insertData = { ...doctor, name: doctor.full_name ?? doctor.email ?? '', invited_by: session?.user?.id ?? null };
     const { error } = await supabase.from('doctors').insert(insertData);
     if (error) {
       console.error('addDoctor error:', error);
