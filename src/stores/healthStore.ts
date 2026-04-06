@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { SEED_MEMBERS, SEED_REPORTS, SEED_RESTRICTIONS, SEED_METRICS, SEED_VITALS } from '../lib/seedData';
+// Seed data removed — real users get empty states, onboarding creates their profile
 
 export interface FamilyMember {
   id: string;
@@ -272,13 +272,8 @@ export const useHealthStore = create<HealthState>((set, get) => ({
     }
 
     if (members.length === 0) {
-      // Fall back to demo seed data when DB is empty/unavailable
-      const seedMembers = SEED_MEMBERS;
-      set({ familyMembers: seedMembers, loading: false });
-      if (!get().activeMemberId && seedMembers.length > 0) {
-        set({ activeMemberId: seedMembers[0].id });
-        get().loadMemberData(seedMembers[0].id);
-      }
+      // No members — new user, onboarding will handle it
+      set({ familyMembers: [], loading: false });
       return;
     }
 
@@ -304,10 +299,10 @@ export const useHealthStore = create<HealthState>((set, get) => ({
       supabase.from('vitals').select('*').eq('member_id', memberId).order('recorded_at', { ascending: false }).limit(100),
     ]);
 
-    const reports = reportsRes.data?.length ? reportsRes.data : SEED_REPORTS.filter(r => r.member_id === memberId);
-    const restrictions = restrictionsRes.data?.length ? restrictionsRes.data : SEED_RESTRICTIONS.filter(r => r.member_id === memberId);
-    const metrics = metricsRes.data?.length ? metricsRes.data : SEED_METRICS.filter(m => m.member_id === memberId);
-    const vitals = vitalsRes.data?.length ? vitalsRes.data : SEED_VITALS.filter(v => v.member_id === memberId);
+    const reports = reportsRes.data ?? [];
+    const restrictions = restrictionsRes.data ?? [];
+    const metrics = metricsRes.data ?? [];
+    const vitals = vitalsRes.data ?? [];
 
     set({ reports, restrictions, metrics, vitals });
     get().computeRegionHealth();

@@ -18,11 +18,14 @@ import TreatmentsPage from './pages/TreatmentsPage';
 import FamilyPage from './pages/FamilyPage';
 import InvitePage from './pages/InvitePage';
 import DoctorSharePage from './pages/DoctorSharePage';
+import OnboardingPage from './pages/OnboardingPage';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const session = useAuthStore(s => s.session);
   const loading = useAuthStore(s => s.loading);
   const initialized = useAuthStore(s => s.initialized);
+  const familyMembers = useHealthStore(s => s.familyMembers);
+  const healthLoading = useHealthStore(s => s.loading);
 
   if (!initialized || loading) {
     return (
@@ -34,6 +37,20 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!session) {
     return <LoginPage />;
+  }
+
+  // Wait for health store to finish loading before checking onboarding
+  if (healthLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--color-tx-muted)' }}>
+        Loading...
+      </div>
+    );
+  }
+
+  // No family members = new user, show onboarding
+  if (familyMembers.length === 0) {
+    return <OnboardingPage />;
   }
 
   return <>{children}</>;
