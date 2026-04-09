@@ -854,22 +854,32 @@ function UploadModal({ open, onClose, memberId, onUpload }: {
     setUploading(true);
     setUploadProgress(0);
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const rawName = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-      const { title, type, date } = parseReportFilename(rawName);
-      // Use user-selected values as override, otherwise use auto-detected
-      const finalType = reportType !== 'lab_results' ? reportType : type;
-      const finalDate = reportDate || date;
-      await onUpload(memberId, file, title, finalType, finalDate);
-      setUploadProgress(Math.round(((i + 1) / files.length) * 100));
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const rawName = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+        const { title, type, date } = parseReportFilename(rawName);
+        // Use user-selected values as override, otherwise use auto-detected
+        const finalType = reportType !== 'lab_results' ? reportType : type;
+        const finalDate = reportDate || date;
+        try {
+          await onUpload(memberId, file, title, finalType, finalDate);
+        } catch (err) {
+          console.error('[UploadModal] Upload threw for file', file.name, err);
+          // Continue with next file instead of blocking
+        }
+        setUploadProgress(Math.round(((i + 1) / files.length) * 100));
+      }
+    } catch (err) {
+      console.error('[UploadModal] handleSubmit error:', err);
+    } finally {
+      // ALWAYS stop the spinner, even if something throws
+      setUploading(false);
+      setFiles([]);
+      setReportDate('');
+      setUploadProgress(0);
+      onClose();
     }
-
-    setUploading(false);
-    setFiles([]);
-    setReportDate('');
-    setUploadProgress(0);
-    onClose();
   };
 
   const handleDrop = (e: React.DragEvent) => {

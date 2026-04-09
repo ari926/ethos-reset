@@ -380,48 +380,62 @@ export const useHealthStore = create<HealthState>((set, get) => ({
   },
 
   uploadReport: async (memberId: string, file: File, title: string, reportType: string, reportDate: string | null) => {
-    const ext = file.name.split('.').pop() ?? 'pdf';
-    const path = `${memberId}/${Date.now()}.${ext}`;
+    try {
+      const ext = file.name.split('.').pop() ?? 'pdf';
+      // Add random suffix to prevent collisions if multiple uploads happen in the same millisecond
+      const path = `${memberId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-    const { error: storageError } = await supabase.storage
-      .from('health-reports')
-      .upload(path, file, { contentType: file.type });
+      const { error: storageError } = await supabase.storage
+        .from('health-reports')
+        .upload(path, file, { contentType: file.type, upsert: false });
 
-    if (storageError) {
-      toast.error('Failed to upload file');
-      return;
-    }
+      if (storageError) {
+        console.error('[uploadReport] Storage upload error:', storageError);
+        toast.error(`Upload failed: ${storageError.message}`);
+        return;
+      }
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('health-reports')
-      .getPublicUrl(path);
+      const { data: { publicUrl } } = supabase.storage
+        .from('health-reports')
+        .getPublicUrl(path);
 
-    const { data: reportData, error } = await supabase.from('health_reports').insert({
-      member_id: memberId,
-      title,
-      report_type: reportType,
-      report_date: reportDate,
-      file_url: publicUrl,
-      storage_path: path,
-      storage_type: 'supabase',
-      file_mime_type: file.type,
-      file_size_bytes: file.size,
-      processing_status: 'pending',
-    }).select('id').single();
+      // Use .select() without .single() to avoid PostgREST throwing on RLS SELECT mismatch
+      const { data: reportRows, error } = await supabase.from('health_reports').insert({
+        member_id: memberId,
+        title,
+        report_type: reportType,
+        report_date: reportDate,
+        file_url: publicUrl,
+        storage_path: path,
+        storage_type: 'supabase',
+        file_mime_type: file.type,
+        file_size_bytes: file.size,
+        processing_status: 'pending',
+      }).select('id');
 
-    if (error) {
-      toast.error('Failed to save report record');
-      return;
-    }
+      if (error) {
+        console.error('[uploadReport] DB insert error:', error);
+        toast.error(`Failed to save report: ${error.message}`);
+        // Clean up orphaned storage file
+        await supabase.storage.from('health-reports').remove([path]).catch(() => {});
+        return;
+      }
 
-    toast.success('Report uploaded — AI processing started');
-    get().loadMemberData(memberId);
+      const reportData = reportRows?.[0];
+      toast.success('Report uploaded — AI processing started');
+      get().loadMemberData(memberId);
 
-    // Trigger AI processing in background
-    if (reportData?.id) {
-      triggerReportProcessing(reportData.id, publicUrl, reportType, memberId).then(() => {
-        get().loadMemberData(memberId);
-      });
+      // Trigger AI processing in background (fire and forget)
+      if (reportData?.id) {
+        triggerReportProcessing(reportData.id, publicUrl, reportType, memberId).then(() => {
+          get().loadMemberData(memberId);
+        }).catch((err) => {
+          console.error('[uploadReport] AI processing failed:', err);
+        });
+      }
+    } catch (err) {
+      console.error('[uploadReport] Unexpected error:', err);
+      toast.error(`Upload failed: ${err instanceof Error ? err.message : 'unknown error'}`);
     }
   },
 
